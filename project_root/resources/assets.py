@@ -90,12 +90,15 @@ class Assets:
 
         cls.images['player_menu'] = load_img(os.path.join("textures", "different", "1player.png"))
         cls.images['players_img'] = load_img(os.path.join("textures", "different", "2players.png"))
-        
+
+        cls.images['blackjack_choice'] = load_img(os.path.join("textures", "different", "blackjack.png"), (int(sc(390)), int(sc(350))))
+        cls.images['fool_choice'] = load_img(os.path.join("textures", "different", "fool.png"), (int(sc(390)), int(sc(350))))
+
         cls.images['raccoonka'] = load_img(os.path.join("textures", "authors", "raccoonka.png"))
         cls.images['muteTexture'] = load_img(os.path.join("textures", "sound", "playmusic.png"))
         cls.images['unmuteTexture'] = load_img(os.path.join("textures", "sound", "mutemusic.png"))
         cls.images['logo'] = load_img(os.path.join("textures", "different", "logo.png"))
-        
+
         cls.images['logo_blond'] = load_img(os.path.join("textures", "companions", "logo_girls", "blond.png"))
         cls.images['logo_red'] = load_img(os.path.join("textures", "companions", "logo_girls", "red.png"))
 

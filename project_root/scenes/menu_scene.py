@@ -138,11 +138,6 @@ class MenuScene(BaseScene):
         self.fool_btn = pygame.Rect(0, 0, int(sc(400)), int(sc(400)))
         self.fool_btn.center = (int(self.cx + sc(250)), self.cy)
 
-        self.bj_img = pygame.Surface((int(sc(350)), int(sc(350))))
-        self.bj_img.fill((50, 50, 50))
-        self.fool_img = pygame.Surface((int(sc(350)), int(sc(350))))
-        self.fool_img.fill((50, 50, 50))
-
         self.player_menu = pygame.transform.smoothscale(Assets.images['player_menu'], (int(sc(290)), int(sc(250))))
         self.players_img = pygame.transform.smoothscale(Assets.images['players_img'], (int(sc(290)), int(sc(250))))
 
@@ -414,13 +409,11 @@ class MenuScene(BaseScene):
                             self.ip_text += event.unicode
                 elif self.showSettings and getattr(self, "showBonusInput", False):
                     if event.key == pygame.K_ESCAPE:
-                        Assets.sounds['back'].play()
-                        self.showBonusInput = False
+                        Assets.sounds['back'].play(); self.showBonusInput = False
                     elif event.key == pygame.K_BACKSPACE:
                         self.bonus_text = self.bonus_text[:-1]
                     elif event.key == pygame.K_RETURN:
-                        Assets.sounds['enter'].play()
-                        self._check_bonus_code()
+                        Assets.sounds['enter'].play(); self._check_bonus_code()
                     else:
                         if len(self.bonus_text) < 8 and event.unicode.upper() in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789":
                             self.bonus_text += event.unicode.upper()
@@ -708,10 +701,13 @@ class MenuScene(BaseScene):
 
         if getattr(self, "showGameChoice", False):
             draw_text_centered(window, t("Select Game"), Assets.fonts['f150'], (255, 255, 255), (0, 0, 0), (self.cx, int(self.engine.HEIGHT * 0.12), 0, 0), int(sc(5)))
-            for btn, img, label in [(self.bj_btn, self.bj_img, "BlackJack"), (self.fool_btn, self.fool_img, "Durak")]:
+
+            for btn, img_key, label in [(self.bj_btn, 'blackjack_choice', t("BlackJack")), (self.fool_btn, 'fool_choice', t("Durak"))]:
                 h = btn.collidepoint(mx, my)
                 bg_rect = btn.inflate(int(sc(20)), int(sc(20)))
                 draw_alpha_rect(window, (0, 0, 0, 160), bg_rect, "gradient" if h else (245, 245, 245), int(sc(3)), int(sc(15)))
+
+                img = Assets.images[img_key]
                 img_rect = img.get_rect(center=btn.center)
                 window.blit(img, img_rect.topleft)
                 draw_text_centered(window, label, Assets.fonts['f60'], (255,255,255), (0,0,0), (btn.x, int(btn.bottom + sc(40)), btn.width, 0), int(sc(2)))
@@ -931,12 +927,15 @@ class MenuScene(BaseScene):
                         draw_alpha_rect(window, (0, 0, 0, 160), bg_b, "gradient" if h_b else (245,245,245), int(sc(3)), int(sc(15)))
                         blond_scaled = pygame.transform.smoothscale(Assets.images['logo_blond'], (self.btn_comp_blond.width, self.btn_comp_blond.height))
                         window.blit(blond_scaled, self.btn_comp_blond.topleft)
+                        draw_text_centered(window, t("Lei"), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (self.btn_comp_blond.x, int(self.btn_comp_blond.bottom + sc(40)), self.btn_comp_blond.width, 0), int(sc(2)))
+
 
                         h_r = self.btn_comp_red.collidepoint(mx, my) or self.engine.current_companion == "red"
                         bg_r = self.btn_comp_red.inflate(int(sc(20)), int(sc(20)))
                         draw_alpha_rect(window, (0, 0, 0, 160), bg_r, "gradient" if h_r else (245,245,245), int(sc(3)), int(sc(15)))
                         red_scaled = pygame.transform.smoothscale(Assets.images['logo_red'], (self.btn_comp_red.width, self.btn_comp_red.height))
                         window.blit(red_scaled, self.btn_comp_red.topleft)
+                        draw_text_centered(window, t("Muse"), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (self.btn_comp_red.x, int(self.btn_comp_red.bottom + sc(40)), self.btn_comp_red.width, 0), int(sc(2)))
 
                     elif self.visual_sub_tab == "emoji":
                         current_pack = self.engine.current_settings.get("emoji_pack", "Standard")

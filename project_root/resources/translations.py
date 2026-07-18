@@ -72,7 +72,13 @@ TRANSLATIONS = {
         "Opponent's turn": "Opponent's turn",
         "Done": "Done",
         "Take": "Take",
-        "You're a fool!": "You're a fool!"
+        "You're a fool!": "You're a fool!",
+        "skins & themes": "skins & themes",
+        "Lei": "Lei",
+        "Muse": "Muse",
+        "Durak": "Durak",
+        "BlackJack": "BlackJack",
+        "Select Game": "Select Game"
     },
     "ru": {
         "Play": "Играть", "Settings": "Настройки", "Authors": "Авторы", "Exit": "Выход",
@@ -147,7 +153,13 @@ TRANSLATIONS = {
         "Opponent's turn": "Ход оппонента",
         "Done": "Пас",
         "Take": "Взять",
-        "You're a fool!": "Ты - дурак!"
+        "You're a fool!": "Ты - дурак!",
+        "skins & themes": "скины & темы",
+        "Lei": "Лея",
+        "Muse": "Муза",
+        "Durak": "Дурак",
+        "BlackJack": "БлэкДжек",
+        "Select Game": "Выбери игру"
     }
 }
 

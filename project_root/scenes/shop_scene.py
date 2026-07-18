@@ -23,9 +23,9 @@ class ShopScene(BaseScene):
         self.spacing = self.item_w + int(sc(60))
 
         self.carousels = {
-            "skins & themes": {"scroll_x": 0, "dragging": False, "velocity": 0, "zoom_amp": 0.0, "y": int(self.engine.HEIGHT * 0.35), "items": self.store_data.get("skins", [])},
-            "titles": {"scroll_x": 0, "dragging": False, "velocity": 0, "zoom_amp": 0.0, "y": int(self.engine.HEIGHT * 0.62), "items": self.store_data.get("titles", [])},
-            "emoticons": {"scroll_x": 0, "dragging": False, "velocity": 0, "zoom_amp": 0.0, "y": int(self.engine.HEIGHT * 0.89), "items": self.store_data.get("emoticons", [])}
+            t("skins & themes"): {"scroll_x": 0, "dragging": False, "velocity": 0, "zoom_amp": 0.0, "y": int(self.engine.HEIGHT * 0.35), "items": self.store_data.get("skins", [])},
+            t("titles"): {"scroll_x": 0, "dragging": False, "velocity": 0, "zoom_amp": 0.0, "y": int(self.engine.HEIGHT * 0.62), "items": self.store_data.get("titles", [])},
+            t("emoticons"): {"scroll_x": 0, "dragging": False, "velocity": 0, "zoom_amp": 0.0, "y": int(self.engine.HEIGHT * 0.89), "items": self.store_data.get("emoticons", [])}
         }
 
         self.last_mx = 0
