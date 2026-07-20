@@ -1,0 +1,25 @@
+skins:
+  - name: "Lei"
+    price: 10000
+  - name: "Cyberpunk"
+    price: 60000
+  - name: "Golden"
+    price: 60000
+
+titles:
+  - name: "Volcano of Luck"
+    price: 30000
+  - name: "High roller"
+    price: 50000
+  - name: "Bluff master"
+    price: 50000
+  - name: "Millionaire"
+    price: 1000000
+
+emoticons:
+  - name: "Skull"
+    price: 40000
+  - name: "Cyberpunk"
+    price: 40000
+  - name: "Raccoon"
+    price: 40000

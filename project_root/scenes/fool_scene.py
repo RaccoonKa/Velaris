@@ -188,7 +188,7 @@ class FoolScene(BaseScene):
         self.do_shuffle_anim()
 
     def do_shuffle_anim(self):
-        shirt = Assets.images['shirt_green'] if self.engine.current_theme == "green" else (Assets.images['shirt_blue'] if self.engine.current_theme == "blue" else Assets.images['shirt_red'])
+        shirt = Assets.images.get(f"shirt_{self.engine.current_theme}", Assets.images['shirt_red'])
         start_pos = self.deck_pos
         end_pos = (self.deck_pos[0] - sc(80), self.deck_pos[1])
         if self.shuffle_count % 2 != 0:
@@ -687,7 +687,7 @@ class FoolScene(BaseScene):
         for pid in expired:
             del self.active_emojis[pid]
 
-        shirt = Assets.images['shirt_green'] if self.engine.current_theme == "green" else (Assets.images['shirt_blue'] if self.engine.current_theme == "blue" else Assets.images['shirt_red'])
+        shirt = Assets.images.get(f"shirt_{self.engine.current_theme}", Assets.images['shirt_red'])
 
         if self.trump_card:
             trump_img = self._get_cached_texture(self.trump_card.get_texture_path(), (self.card_w, self.card_h))

@@ -4,7 +4,7 @@ import yaml
 import random
 import math
 from scenes.base_scene import BaseScene
-from utils.utils import sc, draw_alpha_rect, draw_text_centered
+from utils.utils import sc, draw_alpha_rect, draw_text_centered, draw_text
 from resources import t, Assets, save_progress
 
 class ShopScene(BaseScene):
@@ -23,9 +23,9 @@ class ShopScene(BaseScene):
         self.spacing = self.item_w + int(sc(60))
 
         self.carousels = {
-            t("skins & themes"): {"scroll_x": 0, "dragging": False, "velocity": 0, "zoom_amp": 0.0, "y": int(self.engine.HEIGHT * 0.35), "items": self.store_data.get("skins", [])},
-            t("titles"): {"scroll_x": 0, "dragging": False, "velocity": 0, "zoom_amp": 0.0, "y": int(self.engine.HEIGHT * 0.62), "items": self.store_data.get("titles", [])},
-            t("emoticons"): {"scroll_x": 0, "dragging": False, "velocity": 0, "zoom_amp": 0.0, "y": int(self.engine.HEIGHT * 0.89), "items": self.store_data.get("emoticons", [])}
+            "skins & themes": {"scroll_x": 0, "dragging": False, "velocity": 0, "zoom_amp": 0.0, "y": int(self.engine.HEIGHT * 0.35), "items": self.store_data.get("skins", [])},
+            "titles": {"scroll_x": 0, "dragging": False, "velocity": 0, "zoom_amp": 0.0, "y": int(self.engine.HEIGHT * 0.62), "items": self.store_data.get("titles", [])},
+            "emoticons": {"scroll_x": 0, "dragging": False, "velocity": 0, "zoom_amp": 0.0, "y": int(self.engine.HEIGHT * 0.89), "items": self.store_data.get("emoticons", [])}
         }
 
         self.last_mx = 0
@@ -54,12 +54,21 @@ class ShopScene(BaseScene):
                     os.makedirs("configs")
                 with open(path, "w", encoding="utf-8") as f:
                     yaml.dump({
-                        "skins": [{"name": "Lei", "price": 0}, {"name": "Cyberpunk", "price": 60000}, {"name": "Golden", "price": 60000}],
+                        "skins": [{"name": "Lei", "price": 10000}, {"name": "Cyberpunk", "price": 60000}, {"name": "Golden", "price": 60000}],
                         "titles": [{"name": "Volcano of Luck", "price": 30000}, {"name": "High roller", "price": 50000}, {"name": "Bluff master", "price": 50000}, {"name": "Millionaire", "price": 1000000}],
                         "emoticons": [{"name": "Skull", "price": 40000}, {"name": "Cyberpunk", "price": 40000}, {"name": "Raccoon", "price": 40000}]
                     }, f)
             with open(path, "r", encoding="utf-8") as f:
                 self.store_data = yaml.safe_load(f)
+
+            has_golden = any(skin.get("name") == "Golden" for skin in self.store_data.get("skins", []))
+            if not has_golden:
+                if "skins" not in self.store_data:
+                    self.store_data["skins"] = []
+                self.store_data["skins"].append({"name": "Golden", "price": 60000})
+                with open(path, "w", encoding="utf-8") as f:
+                    yaml.dump(self.store_data, f)
+
         except Exception as e:
             print(e)
 
@@ -132,6 +141,15 @@ class ShopScene(BaseScene):
                                 self.engine.current_progress["emojis_unlocked"] = unlocked
                                 save_progress(self.engine.current_progress)
                                 self.spawn_particles()
+                        elif self.selected_category == "skins & themes":
+                            unlocked = self.engine.current_progress.get("skins_unlocked", ["Musa"])
+                            if name not in unlocked and money >= price:
+                                Assets.sounds['enter'].play()
+                                self.engine.current_progress["money"] -= price
+                                unlocked.append(name)
+                                self.engine.current_progress["skins_unlocked"] = unlocked
+                                save_progress(self.engine.current_progress)
+                                self.spawn_particles()
 
                     elif self.popup_back_btn.collidepoint(mx, my):
                         Assets.sounds['back'].play()
@@ -157,7 +175,7 @@ class ShopScene(BaseScene):
                     dist = math.hypot(mx - self.click_start_pos[0], my - self.click_start_pos[1])
                     if dist < sc(15):
                         cat, item = self._get_item_at_pos(mx, my)
-                        if item and cat in ["titles", "emoticons"]:
+                        if item:
                             Assets.sounds['enter'].play()
                             self.selected_category = cat
                             self.selected_item = item
@@ -214,7 +232,7 @@ class ShopScene(BaseScene):
             if not items: continue
 
             y = data["y"]
-            draw_text_centered(window, t(key.capitalize()), Assets.fonts['f40'], (255, 255, 255), (0, 0, 0), (self.cx, y - self.item_h // 2 - int(sc(40)), 0, 0), int(sc(2)))
+            draw_text_centered(window, t(key), Assets.fonts['f40'], (255, 255, 255), (0, 0, 0), (self.cx, y - self.item_h // 2 - int(sc(40)), 0, 0), int(sc(2)))
 
             center_i = -int(round(data["scroll_x"] / self.spacing))
 
@@ -255,7 +273,7 @@ class ShopScene(BaseScene):
                 elif key == "emoticons":
                     is_bought = item["name"] in self.engine.current_progress.get("emojis_unlocked", ["Standard"])
                 elif key == "skins & themes":
-                    is_bought = item["name"] in self.engine.current_progress.get("skins_unlocked", ["Lei"])
+                    is_bought = item["name"] in self.engine.current_progress.get("skins_unlocked", ["Musa"])
 
                 draw_text_centered(card_surf, item["name"], Assets.fonts['text50'], (255, 255, 255), (0,0,0), (0, int(sc(40)), self.item_w, 0))
 
@@ -281,10 +299,53 @@ class ShopScene(BaseScene):
         if self.show_popup and self.selected_item:
             draw_alpha_rect(window, (0, 0, 0, 200), (0, 0, self.engine.WIDTH, self.engine.HEIGHT), (0, 0, 0), 0, 0)
 
-            pygame.draw.rect(window, (30, 30, 30), self.popup_rect, border_radius=int(sc(20)))
-            draw_alpha_rect(window, (0, 0, 0, 0), self.popup_rect, (200, 200, 200), int(sc(3)), int(sc(20)))
+            skin_name = self.selected_item.get('name') if self.selected_category == "skins & themes" else ""
 
+            if skin_name == "Golden":
+                popup_surf = pygame.Surface((self.popup_rect.width, self.popup_rect.height), pygame.SRCALPHA)
+
+                r_radius = int(sc(20))
+                pygame.draw.rect(popup_surf, (255, 255, 255, 255), (0, 0, self.popup_rect.width, self.popup_rect.height), border_radius=r_radius)
+
+                gold_img = Assets.images.get('gold_preview')
+                if gold_img:
+                    ow, oh = gold_img.get_width(), gold_img.get_height()
+                    scale = max(self.popup_rect.width / ow, self.popup_rect.height / oh)
+                    nw, nh = int(ow * scale), int(oh * scale)
+                    gold_scaled = pygame.transform.smoothscale(gold_img, (nw, nh))
+
+                    crop_x = (nw - self.popup_rect.width) // 2
+                    crop_y = (nh - self.popup_rect.height) // 2
+
+                    popup_surf.blit(gold_scaled, (0, 0), pygame.Rect(crop_x, crop_y, self.popup_rect.width, self.popup_rect.height), special_flags=pygame.BLEND_RGBA_MIN)
+
+                window.blit(popup_surf, self.popup_rect.topleft)
+
+                description_lines = [
+                    t("• New outfit for Musa"),
+                    t("• New card shirt"),
+                    t("• New backgrounds"),
+                    t("• New music"),
+                    t("• New cursor")
+                ]
+
+                start_x = self.popup_rect.left + int(sc(50))
+                start_y = self.popup_rect.top + int(sc(140))
+                line_height = int(sc(40))
+
+                text_bg_rect = pygame.Rect(start_x - int(sc(20)), start_y - int(sc(10)), int(sc(360)), len(description_lines) * line_height + int(sc(15)))
+                draw_alpha_rect(window, (0, 0, 0, 110), text_bg_rect, (0, 0, 0), 0, int(sc(10)))
+
+                for idx, line in enumerate(description_lines):
+                    pos_y = start_y + idx * line_height
+                    draw_text(window, line, Assets.fonts['text30'], (255, 255, 255), (0, 0, 0), (start_x, pos_y), int(sc(2)))
+            else:
+                pygame.draw.rect(window, (30, 30, 30), self.popup_rect, border_radius=int(sc(20)))
+
+            draw_alpha_rect(window, (0, 0, 0, 0), self.popup_rect, (200, 200, 200), int(sc(3)), int(sc(20)))
             draw_text_centered(window, t("Preview"), Assets.fonts['f60'], (255, 255, 255), (0, 0, 0), (self.cx, self.popup_rect.top + int(sc(60)), 0, 0), int(sc(3)))
+
+            is_bought = False
 
             if self.selected_category == "titles":
                 title_name = self.selected_item['name']
@@ -316,8 +377,20 @@ class ShopScene(BaseScene):
                 is_bought = self.selected_item["name"] in unlocked
 
             elif self.selected_category == "skins & themes":
-                unlocked = self.engine.current_progress.get("skins_unlocked", ["Lei"])
-                is_bought = self.selected_item["name"] in unlocked
+                unlocked = self.engine.current_progress.get("skins_unlocked", ["Musa"])
+                is_bought = skin_name in unlocked
+
+                if skin_name == "Lei":
+                    lei_img = Assets.images.get('lei')
+                    if lei_img:
+                        ow, oh = lei_img.get_width(), lei_img.get_height()
+                        max_h = int(sc(260))
+                        if oh > max_h:
+                            scale = max_h / oh
+                            lei_img = pygame.transform.smoothscale(lei_img, (int(ow * scale), max_h))
+
+                        img_rect = lei_img.get_rect(center=(self.cx, self.cy - int(sc(20))))
+                        window.blit(lei_img, img_rect.topleft)
 
             price = self.selected_item["price"]
             money = self.engine.current_progress.get("money", 10000)
@@ -328,7 +401,8 @@ class ShopScene(BaseScene):
                 btn_color = (100, 100, 100)
                 btn_txt = "Bought"
             else:
-                draw_text_centered(window, f"{price} $", Assets.fonts['text50'], (255, 215, 0), (0, 0, 0), (self.cx, self.cy + int(sc(90)), 0, 0), int(sc(2)))
+                shadow_offset = int(sc(3)) if skin_name == "Golden" else int(sc(2))
+                draw_text_centered(window, f"{price} $", Assets.fonts['text50'], (255, 215, 0), (0, 0, 0), (self.cx, self.cy + int(sc(90)), 0, 0), shadow_offset)
                 if can_afford:
                     btn_color = (50, 150, 50)
                     btn_txt = "Buy"

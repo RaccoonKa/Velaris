@@ -372,7 +372,7 @@ class BlackjackScene(BaseScene):
 
             c_d1 = self.deck.erase(random.randint(0, len(self.deck) - 1))
             if self.engine.server: self.engine.server.broadcast({"action": "deal", "target": "dealer", "val": c_d1.value, "suit": c_d1.suit, "hidden": True})
-            shirt = Assets.images['shirt_green'] if self.engine.current_theme == "green" else (Assets.images['shirt_blue'] if self.engine.current_theme == "blue" else Assets.images['shirt_red'])
+            shirt = Assets.images.get(f"shirt_{self.engine.current_theme}", Assets.images['shirt_red'])
             self._deal_animated(c_d1, int(self.cx - self.card_w // 2), int(sc(50)), lambda card=c_d1: [Assets.sounds['card'].play(), self.dealer.take_card(card)], img=shirt)
 
             for pid in sorted(list(self.players.keys())):
@@ -559,7 +559,7 @@ class BlackjackScene(BaseScene):
                 if target == "dealer":
                     d_len = len(self.dealer.get_deck()) + 1
                     end_x = int(self.cx - (self.card_w + (d_len - 1) * sc(40)) // 2 + (d_len - 1) * sc(40))
-                    shirt = Assets.images['shirt_green'] if self.engine.current_theme == "green" else (Assets.images['shirt_blue'] if self.engine.current_theme == "blue" else Assets.images['shirt_red'])
+                    shirt = Assets.images.get(f"shirt_{self.engine.current_theme}", Assets.images['shirt_red'])
                     img = shirt if hidden else None
                     if hidden: self.dealer_hidden = True
                     self._deal_animated(c, end_x, int(sc(50)), lambda card=c: [Assets.sounds['card'].play(), self.dealer.take_card(card)], img=img)
@@ -599,7 +599,7 @@ class BlackjackScene(BaseScene):
         for pid in expired:
             del self.active_emojis[pid]
 
-        shirt = Assets.images['shirt_green'] if self.engine.current_theme == "green" else (Assets.images['shirt_blue'] if self.engine.current_theme == "blue" else Assets.images['shirt_red'])
+        shirt = Assets.images.get(f"shirt_{self.engine.current_theme}", Assets.images['shirt_red'])
         for i in range(5): window.blit(shirt, (self.deck_pos[0] - i * 2, self.deck_pos[1] - i * 2))
 
         sorted_ids = sorted(list(self.players.keys()))

@@ -9,8 +9,8 @@ from resources import load_settings, save_settings, load_progress, save_progress
 from scenes.menu_scene import MenuScene
 from scenes.blackjack_scene import BlackjackScene
 from scenes.fool_scene import FoolScene
+from scenes.poker_scene import PokerScene
 from scenes.shop_scene import ShopScene
-
 
 class GameEngine:
     def __init__(self):
@@ -70,7 +70,8 @@ class GameEngine:
         self.MUSIC_PLAYLISTS = {
             "red": {"menu": ["red_menu1.mp3", "red_menu2.mp3", "red_menu3.mp3"], "game": ["red_game1.mp3", "red_game2.mp3"]},
             "green": {"menu": ["green_menu1.mp3", "green_menu2.mp3", "green_menu3.mp3"], "game": ["green_game1.mp3", "green_game2.mp3"]},
-            "blue": {"menu": ["blue_menu1.mp3", "blue_menu2.mp3", "blue_menu3.mp3"], "game": ["blue_game1.mp3", "blue_game2.mp3"]}
+            "blue": {"menu": ["blue_menu1.mp3", "blue_menu2.mp3", "blue_menu3.mp3"], "game": ["blue_game1.mp3", "blue_game2.mp3"]},
+            "gold": {"menu": ["gold_menu1.mp3", "gold_menu2.mp3", "gold_menu3.mp3", "gold_menu4.mp3"], "game": ["gold_game1.mp3", "gold_game2.mp3"]}
         }
 
         self.update_sfx_volume()
@@ -81,6 +82,7 @@ class GameEngine:
             "menu": MenuScene(self),
             "blackjack": BlackjackScene(self),
             "fool": FoolScene(self),
+            "poker": PokerScene(self),
             "shop": ShopScene(self)
         }
         self.current_scene = None
@@ -94,6 +96,8 @@ class GameEngine:
     def pick_random_emotion(self):
         if self.current_companion == "blond":
             self.current_emotion = random.choice(["main", "arrogance", "idea"])
+        elif self.current_companion == "gold":
+            self.current_emotion = random.choice(["main", "arrogance", "kiss", "think", "wink"])
         else:
             self.current_emotion = random.choice(["main", "arrogance", "kiss", "wink"])
 
@@ -143,6 +147,11 @@ class GameEngine:
             self.cursor_offset = (self.current_cursor.get_width() // 2, self.current_cursor.get_height() // 2)
             self.current_bg = Assets.images.get(f'bg_blue{self.current_bg_index}')
             self.thumb_color = (44, 72, 160)
+        elif self.current_theme == "gold":
+            self.current_cursor = Assets.images.get('c_gold', Assets.images['c1'])
+            self.cursor_offset = (self.current_cursor.get_width() // 5, self.current_cursor.get_height() // 5)
+            self.current_bg = Assets.images.get(f'bg_gold{self.current_bg_index}')
+            self.thumb_color = (255, 215, 0)
         else:
             self.current_cursor = Assets.images['c1']
             self.cursor_offset = (self.current_cursor.get_width() // 5, self.current_cursor.get_height() // 5)

@@ -65,10 +65,10 @@ class Assets:
             i = load_img(os.path.join(*p))
             return pygame.transform.smoothscale(i, (int(i.get_width()*f), int(i.get_height()*f)))
 
-        cls.companions = {'girl_blond': {'red': {}, 'green': {}, 'blue': {}}, 'girl_red': {}}
+        cls.companions = {'girl_blond': {'red': {}, 'green': {}, 'blue': {}, 'gold': {}}, 'girl_red': {}, 'girl_gold': {}}
         emotions = ['kiss', 'main', 'wink', 'arrogance', 'idea', 'think']
 
-        for theme in ['red', 'green', 'blue']:
+        for theme in ['red', 'green', 'blue', 'gold']:
             for emo in emotions:
                 try:
                     cls.companions['girl_blond'][theme][emo] = _load_s(["textures", "companions", "girl_blond", theme, f"{emo}.png"], 0.7)
@@ -81,12 +81,20 @@ class Assets:
             except Exception:
                 pass
 
+        for emo in emotions:
+            try:
+                cls.companions['girl_gold'][emo] = _load_s(["textures", "companions", "girl_gold", f"{emo}.png"], 0.71)
+            except Exception:
+                pass
+
         cls.images['bg_red1'] = load_img(os.path.join("textures", "backgrounds", "red", "bg_red1.png"), (Config.WIDTH, Config.HEIGHT))
         cls.images['bg_red2'] = load_img(os.path.join("textures", "backgrounds", "red", "bg_red2.png"), (Config.WIDTH, Config.HEIGHT))
         cls.images['bg_green1'] = load_img(os.path.join("textures", "backgrounds", "green", "bg_green1.png"), (Config.WIDTH, Config.HEIGHT))
         cls.images['bg_green2'] = load_img(os.path.join("textures", "backgrounds", "green", "bg_green2.png"), (Config.WIDTH, Config.HEIGHT))
         cls.images['bg_blue1'] = load_img(os.path.join("textures", "backgrounds", "blue", "bg_blue1.png"), (Config.WIDTH, Config.HEIGHT))
         cls.images['bg_blue2'] = load_img(os.path.join("textures", "backgrounds", "blue", "bg_blue2.png"), (Config.WIDTH, Config.HEIGHT))
+        cls.images['bg_gold1'] = load_img(os.path.join("textures", "backgrounds", "gold", "bg_gold1.png"), (Config.WIDTH, Config.HEIGHT))
+        cls.images['bg_gold2'] = load_img(os.path.join("textures", "backgrounds", "gold", "bg_gold2.png"), (Config.WIDTH, Config.HEIGHT))
 
         cls.images['player_menu'] = load_img(os.path.join("textures", "different", "1player.png"))
         cls.images['players_img'] = load_img(os.path.join("textures", "different", "2players.png"))
@@ -98,24 +106,35 @@ class Assets:
         cls.images['muteTexture'] = load_img(os.path.join("textures", "sound", "playmusic.png"))
         cls.images['unmuteTexture'] = load_img(os.path.join("textures", "sound", "mutemusic.png"))
         cls.images['logo'] = load_img(os.path.join("textures", "different", "logo.png"))
+        cls.images['gold_preview'] = load_img(os.path.join("textures", "different", "gold.png"))
+        cls.images['lei'] = load_img(os.path.join("textures", "different", "lei.png"))
 
         cls.images['logo_blond'] = load_img(os.path.join("textures", "companions", "logo_girls", "blond.png"))
         cls.images['logo_red'] = load_img(os.path.join("textures", "companions", "logo_girls", "red.png"))
+        cls.images['logo_gold'] = load_img(os.path.join("textures", "companions", "logo_girls", "gold.png"))
 
         card_w, card_h = sc(140), sc(190)
         cls.images['shirt_red'] = load_img(os.path.join("textures", "cards", "shirts", "shirtred.png"), (card_w, card_h))
         cls.images['shirt_green'] = load_img(os.path.join("textures", "cards", "shirts", "shirtgreen.png"), (card_w, card_h))
         cls.images['shirt_blue'] = load_img(os.path.join("textures", "cards", "shirts", "shirtblue.png"), (card_w, card_h))
+        cls.images['shirt_gold'] = load_img(os.path.join("textures", "cards", "shirts", "shirtgold.png"), (card_w, card_h))
 
         c1 = load_img(os.path.join("textures", "cursors", "cursor1.png"))
         c2 = load_img(os.path.join("textures", "cursors", "cursor2.png"))
         c3 = load_img(os.path.join("textures", "cursors", "cursor3.png"))
+
+        try:
+            c_gold = load_img(os.path.join("textures", "cursors", "gold_cursor.png"))
+        except Exception:
+            c_gold = c1
+
         if c1.get_width() > 1:
             cls.images['c1'] = pygame.transform.smoothscale(c1, (int(c1.get_width() * 0.028), int(c1.get_height() * 0.028)))
             cls.images['c2'] = pygame.transform.smoothscale(c2, (int(c2.get_width() * 0.028), int(c2.get_height() * 0.028)))
             cls.images['c3'] = pygame.transform.smoothscale(c3, (int(c3.get_width() * 0.028), int(c3.get_height() * 0.028)))
+            cls.images['c_gold'] = pygame.transform.smoothscale(c_gold, (int(c_gold.get_width() * 0.028), int(c_gold.get_height() * 0.028)))
         else:
-            cls.images['c1'] = c1; cls.images['c2'] = c2; cls.images['c3'] = c3
+            cls.images['c1'] = c1; cls.images['c2'] = c2; cls.images['c3'] = c3; cls.images['c_gold'] = c_gold
 
         try:
             raw = pygame.image.load(os.path.join("textures", "chips", "all_chips.png")).convert_alpha()

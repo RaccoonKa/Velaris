@@ -14,7 +14,7 @@ DEFAULT_SETTINGS = {
     "brightness": 1.0,
     "current_theme": "red",
     "current_bg_index": 1,
-    "companion": "blond",
+    "companion": "red",
     "language": "en",
     "vsync": False,
     "skip_splash": False,
