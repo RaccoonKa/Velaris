@@ -1,7 +1,11 @@
 import pygame
 import math
+import threading
 import random
 import os
+import urllib.request
+from email.utils import parsedate_to_datetime
+from datetime import datetime, timedelta
 from scenes.base_scene import BaseScene
 from utils.utils import sc, draw_alpha_rect, draw_text_centered, draw_gradient_circle, draw_text
 from resources import save_settings, save_progress, t, set_language, get_language, Assets
@@ -10,6 +14,7 @@ from network.network import GameServer, GameClient
 class MenuScene(BaseScene):
     def __init__(self, engine):
         super().__init__(engine)
+        self.today_date = datetime.now().strftime("%Y-%m-%d")
         self._init_ui()
         self.hovered_button = None
         self.showPlay = False
@@ -134,13 +139,13 @@ class MenuScene(BaseScene):
         self.back_btn = pygame.Rect(0, 0, int(sc(320)), int(sc(80))); self.back_btn.bottomright = (int(self.engine.WIDTH - sc(50)), int(self.engine.HEIGHT - sc(50)))
 
         self.bj_btn = pygame.Rect(0, 0, int(sc(320)), int(sc(320)))
-        self.bj_btn.center = (int(self.cx - sc(380)), self.cy)
+        self.bj_btn.center = (int(self.cx - sc(450)), self.cy)
 
-        self.fool_btn = pygame.Rect(0, 0, int(sc(320)), int(sc(320)))
+        self.fool_btn = pygame.Rect(0, 0, int(sc(330)), int(sc(320)))
         self.fool_btn.center = (self.cx, self.cy)
 
         self.poker_btn = pygame.Rect(0, 0, int(sc(320)), int(sc(320)))
-        self.poker_btn.center = (int(self.cx + sc(380)), self.cy)
+        self.poker_btn.center = (int(self.cx + sc(450)), self.cy)
 
         self.player_menu = pygame.transform.smoothscale(Assets.images['player_menu'], (int(sc(290)), int(sc(250))))
         self.players_img = pygame.transform.smoothscale(Assets.images['players_img'], (int(sc(290)), int(sc(250))))
@@ -168,7 +173,8 @@ class MenuScene(BaseScene):
         self.bonus_tab_btn = pygame.Rect(0, 0, int(sc(350)), int(sc(70))); self.bonus_tab_btn.center = (self.cx, int(self.cy + sc(135)))
 
         self.bonus_input_rect = pygame.Rect(0, 0, int(sc(400)), int(sc(80))); self.bonus_input_rect.center = (self.cx, self.cy)
-        self.bonus_back_btn = pygame.Rect(0, 0, int(sc(200)), int(sc(60))); self.bonus_back_btn.center = (self.cx, int(self.cy + sc(150)))
+        self.bonus_activate_btn = pygame.Rect(0, 0, int(sc(260)), int(sc(70))); self.bonus_activate_btn.center = (int(self.cx - sc(160)), int(self.cy + sc(150)))
+        self.bonus_back_btn = pygame.Rect(0, 0, int(sc(260)), int(sc(70))); self.bonus_back_btn.center = (int(self.cx + sc(160)), int(self.cy + sc(150)))
 
         self.slider_bg = pygame.Rect(0, 0, int(sc(500)), int(sc(30))); self.slider_bg.center = (int(self.cx + sc(50)), int(self.cy - sc(180)))
         self.slider_thumb = pygame.Rect(0, 0, int(sc(40)), int(sc(40)))
@@ -202,30 +208,38 @@ class MenuScene(BaseScene):
         self.v_tab_comp = pygame.Rect(0, 0, int(sc(350)), int(sc(70))); self.v_tab_comp.center = (self.cx, int(self.engine.HEIGHT * 0.25))
         self.v_tab_emoji = pygame.Rect(0, 0, int(sc(350)), int(sc(70))); self.v_tab_emoji.center = (int(self.cx + sc(370)), int(self.engine.HEIGHT * 0.25))
 
-        self.btn_red = pygame.Rect(0, 0, int(sc(200)), int(sc(70)))
-        self.btn_green = pygame.Rect(0, 0, int(sc(200)), int(sc(70)))
-        self.btn_blue = pygame.Rect(0, 0, int(sc(200)), int(sc(70)))
-        self.btn_gold = pygame.Rect(0, 0, int(sc(200)), int(sc(70)))
+        self.tut_tab_bj = pygame.Rect(0, 0, int(sc(350)), int(sc(70))); self.tut_tab_bj.center = (int(self.cx - sc(370)), int(self.engine.HEIGHT * 0.25))
+        self.tut_tab_durak = pygame.Rect(0, 0, int(sc(350)), int(sc(70))); self.tut_tab_durak.center = (self.cx, int(self.engine.HEIGHT * 0.25))
+        self.tut_tab_poker = pygame.Rect(0, 0, int(sc(350)), int(sc(70))); self.tut_tab_poker.center = (int(self.cx + sc(370)), int(self.engine.HEIGHT * 0.25))
+        self.tutorial_sub_tab = "blackjack"
+
+        self.btn_red = pygame.Rect(0, 0, int(sc(240)), int(sc(70)))
+        self.btn_green = pygame.Rect(0, 0, int(sc(240)), int(sc(70)))
+        self.btn_blue = pygame.Rect(0, 0, int(sc(240)), int(sc(70)))
+        self.btn_gold = pygame.Rect(0, 0, int(sc(240)), int(sc(70)))
+        self.btn_cyberpunk = pygame.Rect(0, 0, int(sc(240)), int(sc(70)))
 
         self.btn_comp_blond = pygame.Rect(0, 0, int(sc(200)), int(sc(200)))
         self.btn_comp_red = pygame.Rect(0, 0, int(sc(200)), int(sc(200)))
         self.btn_comp_gold = pygame.Rect(0, 0, int(sc(200)), int(sc(200)))
+        self.btn_comp_cyberpunk = pygame.Rect(0, 0, int(sc(200)), int(sc(200)))
 
         self._update_theme_buttons_layout()
 
     def _update_theme_buttons_layout(self):
         is_lei_unlocked = "Lei" in self.engine.current_progress.get("skins_unlocked", ["Musa"])
         is_gold_unlocked = "Golden" in self.engine.current_progress.get("skins_unlocked", ["Musa"])
+        is_cyberpunk_unlocked = "Cyberpunk" in self.engine.current_progress.get("skins_unlocked", ["Musa"])
 
-        if is_gold_unlocked:
-            self.btn_red.center = (int(self.cx - sc(330)), int(self.cy))
-            self.btn_green.center = (int(self.cx - sc(110)), int(self.cy))
-            self.btn_blue.center = (int(self.cx + sc(110)), int(self.cy))
-            self.btn_gold.center = (int(self.cx + sc(330)), int(self.cy))
-        else:
-            self.btn_red.center = (int(self.cx - sc(300)), int(self.cy))
-            self.btn_green.center = (self.cx, int(self.cy))
-            self.btn_blue.center = (int(self.cx + sc(300)), int(self.cy))
+        active_bgs = [self.btn_red, self.btn_green, self.btn_blue]
+        if is_gold_unlocked: active_bgs.append(self.btn_gold)
+        if is_cyberpunk_unlocked: active_bgs.append(self.btn_cyberpunk)
+
+        bg_spacing = sc(350)
+        w_total = len(active_bgs) * bg_spacing
+        start_x = self.cx - w_total / 2 + bg_spacing / 2
+        for i, b in enumerate(active_bgs):
+            b.center = (int(start_x + i * bg_spacing), int(self.cy))
 
         self.btn_red_bg1 = pygame.Rect(self.btn_red.x, int(self.btn_red.bottom + sc(5)), self.btn_red.width, int(sc(60)))
         self.btn_red_bg2 = pygame.Rect(self.btn_red.x, int(self.btn_red_bg1.bottom + sc(5)), self.btn_red.width, int(sc(60)))
@@ -233,28 +247,26 @@ class MenuScene(BaseScene):
         self.btn_green_bg2 = pygame.Rect(self.btn_green.x, int(self.btn_green_bg1.bottom + sc(5)), self.btn_green.width, int(sc(60)))
         self.btn_blue_bg1 = pygame.Rect(self.btn_blue.x, int(self.btn_blue.bottom + sc(5)), self.btn_blue.width, int(sc(60)))
         self.btn_blue_bg2 = pygame.Rect(self.btn_blue.x, int(self.btn_blue_bg1.bottom + sc(5)), self.btn_blue.width, int(sc(60)))
+
         if is_gold_unlocked:
             self.btn_gold_bg1 = pygame.Rect(self.btn_gold.x, int(self.btn_gold.bottom + sc(5)), self.btn_gold.width, int(sc(60)))
             self.btn_gold_bg2 = pygame.Rect(self.btn_gold.x, int(self.btn_gold_bg1.bottom + sc(5)), self.btn_gold.width, int(sc(60)))
 
+        if is_cyberpunk_unlocked:
+            self.btn_cyberpunk_bg1 = pygame.Rect(self.btn_cyberpunk.x, int(self.btn_cyberpunk.bottom + sc(5)), self.btn_cyberpunk.width, int(sc(60)))
+            self.btn_cyberpunk_bg2 = pygame.Rect(self.btn_cyberpunk.x, int(self.btn_cyberpunk_bg1.bottom + sc(5)), self.btn_cyberpunk.width, int(sc(60)))
+
         active_comps = []
-        if is_lei_unlocked:
-            active_comps.append(self.btn_comp_blond)
-
+        if is_lei_unlocked: active_comps.append(self.btn_comp_blond)
         active_comps.append(self.btn_comp_red)
+        if is_gold_unlocked: active_comps.append(self.btn_comp_gold)
+        if is_cyberpunk_unlocked: active_comps.append(self.btn_comp_cyberpunk)
 
-        if is_gold_unlocked:
-            active_comps.append(self.btn_comp_gold)
-
-        if len(active_comps) == 1:
-            active_comps[0].center = (self.cx, int(self.cy + sc(50)))
-        elif len(active_comps) == 2:
-            active_comps[0].center = (int(self.cx - sc(150)), int(self.cy + sc(50)))
-            active_comps[1].center = (int(self.cx + sc(150)), int(self.cy + sc(50)))
-        elif len(active_comps) == 3:
-            active_comps[0].center = (int(self.cx - sc(250)), int(self.cy + sc(50)))
-            active_comps[1].center = (self.cx, int(self.cy + sc(50)))
-            active_comps[2].center = (int(self.cx + sc(250)), int(self.cy + sc(50)))
+        comp_spacing = sc(350)
+        w_total_comp = len(active_comps) * comp_spacing
+        start_x_comp = self.cx - w_total_comp / 2 + comp_spacing / 2
+        for i, b in enumerate(active_comps):
+            b.center = (int(start_x_comp + i * comp_spacing), int(self.cy + sc(50)))
 
     def get_emoji_pack_rects(self):
         unlocked_packs = self.engine.current_progress.get("emojis_unlocked", ["Standard"])
@@ -279,14 +291,34 @@ class MenuScene(BaseScene):
         self._build_wheel_pool()
         self._update_theme_buttons_layout()
 
+        if not hasattr(self, 'date_synced'):
+            self.today_date = datetime.now().strftime("%Y-%m-%d")
+            def _async_sync_date():
+                try:
+                    req = urllib.request.Request("http://google.com", method="HEAD")
+                    with urllib.request.urlopen(req, timeout=1.5) as r:
+                        d_str = r.headers.get('Date')
+                        if d_str:
+                            dt = parsedate_to_datetime(d_str)
+                            self.today_date = dt.strftime("%Y-%m-%d")
+                            self.date_synced = True
+                except Exception:
+                    pass
+            threading.Thread(target=_async_sync_date, daemon=True).start()
+
         is_lei_unlocked = "Lei" in self.engine.current_progress.get("skins_unlocked", ["Musa"])
         is_gold_unlocked = "Golden" in self.engine.current_progress.get("skins_unlocked", ["Musa"])
+        is_cyberpunk_unlocked = "Cyberpunk" in self.engine.current_progress.get("skins_unlocked", ["Musa"])
 
         if self.engine.current_companion == "blond" and not is_lei_unlocked:
             self.engine.current_companion = "red"
             self.engine.current_settings["companion"] = "red"
             save_settings(self.engine.current_settings)
         elif self.engine.current_companion == "gold" and not is_gold_unlocked:
+            self.engine.current_companion = "red"
+            self.engine.current_settings["companion"] = "red"
+            save_settings(self.engine.current_settings)
+        elif self.engine.current_companion == "cyberpunk" and not is_cyberpunk_unlocked:
             self.engine.current_companion = "red"
             self.engine.current_settings["companion"] = "red"
             save_settings(self.engine.current_settings)
@@ -349,8 +381,13 @@ class MenuScene(BaseScene):
         if not (self.showPlay or self.showSettings or self.showAuthors or self.showGameTypeMenu or self.showHostJoinMenu or self.showHostPlayersMenu or self.showIPInput or getattr(self, "showGameChoice", False)):
             for b in [self.play_btn, self.shop_btn, self.set_btn, self.auth_btn, self.exit_btn]:
                 if b.collidepoint((mx, my)): current_hover = b
+
             if self.wheel_state == "idle" and self.spin_btn_rect.collidepoint((mx, my)):
-                current_hover = self.spin_btn_rect
+                free_spins = self.engine.current_progress.get("free_spins", 0)
+                last_spin = self.engine.current_progress.get("last_spin_date", "")
+                if free_spins > 0 or last_spin != getattr(self, 'today_date', ''):
+                    current_hover = self.spin_btn_rect
+
         elif getattr(self, "showGameChoice", False):
             for b in [self.bj_btn, self.fool_btn, self.poker_btn, self.back_btn]:
                 if b.collidepoint((mx, my)): current_hover = b
@@ -371,7 +408,8 @@ class MenuScene(BaseScene):
                 if b.collidepoint((mx, my)): current_hover = b
         elif self.showSettings:
             if getattr(self, "showBonusInput", False):
-                if self.bonus_back_btn.collidepoint((mx, my)): current_hover = self.bonus_back_btn
+                for b in [self.bonus_activate_btn, self.bonus_back_btn]:
+                    if b.collidepoint((mx, my)): current_hover = b
             else:
                 if self.settings_tab == "menu":
                     for b in [self.gen_tab_btn, self.theme_tab_btn, self.tut_tab_btn, self.bonus_tab_btn, self.back_btn]:
@@ -393,12 +431,13 @@ class MenuScene(BaseScene):
 
                     is_lei_unlocked = "Lei" in self.engine.current_progress.get("skins_unlocked", ["Musa"])
                     is_gold_unlocked = "Golden" in self.engine.current_progress.get("skins_unlocked", ["Musa"])
+                    is_cyberpunk_unlocked = "Cyberpunk" in self.engine.current_progress.get("skins_unlocked", ["Musa"])
 
                     if self.visual_sub_tab == "bg":
                         for b in [self.btn_red, self.btn_green, self.btn_blue]:
                             if b.collidepoint((mx, my)): current_hover = b
-                        if is_gold_unlocked and self.btn_gold.collidepoint((mx, my)):
-                            current_hover = self.btn_gold
+                        if is_gold_unlocked and self.btn_gold.collidepoint((mx, my)): current_hover = self.btn_gold
+                        if is_cyberpunk_unlocked and self.btn_cyberpunk.collidepoint((mx, my)): current_hover = self.btn_cyberpunk
 
                         if self.dropdown_open == "red":
                             for b in [self.btn_red_bg1, self.btn_red_bg2]:
@@ -412,21 +451,23 @@ class MenuScene(BaseScene):
                         elif self.dropdown_open == "gold" and is_gold_unlocked:
                             for b in [self.btn_gold_bg1, self.btn_gold_bg2]:
                                 if b.collidepoint((mx, my)): current_hover = b
+                        elif self.dropdown_open == "cyberpunk" and is_cyberpunk_unlocked:
+                            for b in [self.btn_cyberpunk_bg1, self.btn_cyberpunk_bg2]:
+                                if b.collidepoint((mx, my)): current_hover = b
 
                     elif self.visual_sub_tab == "comp":
-                        if is_lei_unlocked and self.btn_comp_blond.collidepoint((mx, my)):
-                            current_hover = self.btn_comp_blond
-                        elif self.btn_comp_red.collidepoint((mx, my)):
-                            current_hover = self.btn_comp_red
-                        elif is_gold_unlocked and getattr(self, 'btn_comp_gold', None) and self.btn_comp_gold.collidepoint((mx, my)):
-                            current_hover = self.btn_comp_gold
+                        if is_lei_unlocked and self.btn_comp_blond.collidepoint((mx, my)): current_hover = self.btn_comp_blond
+                        elif self.btn_comp_red.collidepoint((mx, my)): current_hover = self.btn_comp_red
+                        elif is_gold_unlocked and getattr(self, 'btn_comp_gold', None) and self.btn_comp_gold.collidepoint((mx, my)): current_hover = self.btn_comp_gold
+                        elif is_cyberpunk_unlocked and getattr(self, 'btn_comp_cyberpunk', None) and self.btn_comp_cyberpunk.collidepoint((mx, my)): current_hover = self.btn_comp_cyberpunk
 
                     elif self.visual_sub_tab == "emoji":
                         for pack_name, b in self.get_emoji_pack_rects():
                             if b.collidepoint((mx, my)): current_hover = b
 
                 elif self.settings_tab == "tutorial":
-                    if self.back_btn.collidepoint((mx, my)): current_hover = self.back_btn
+                    for b in [self.tut_tab_bj, self.tut_tab_durak, self.tut_tab_poker, self.back_btn]:
+                        if b.collidepoint((mx, my)): current_hover = b
         elif self.showAuthors:
             if self.back_btn.collidepoint((mx, my)): current_hover = self.back_btn
 
@@ -449,6 +490,18 @@ class MenuScene(BaseScene):
             self.update_titles()
         elif code == "P9D3K6W1":
             self.engine.current_progress["money"] = self.engine.current_progress.get("money", 10000) + 10000
+            redeemed.append(code)
+            self.engine.current_progress["redeemed_codes"] = redeemed
+            save_progress(self.engine.current_progress)
+            self.bonus_message = t("Code activated!")
+        elif code == "VELARIS20":
+            self.engine.current_progress["money"] = self.engine.current_progress.get("money", 10000) + 20000
+            redeemed.append(code)
+            self.engine.current_progress["redeemed_codes"] = redeemed
+            save_progress(self.engine.current_progress)
+            self.bonus_message = t("Code activated!")
+        elif code == "LUCKY3":
+            self.engine.current_progress["free_spins"] = self.engine.current_progress.get("free_spins", 0) + 3
             redeemed.append(code)
             self.engine.current_progress["redeemed_codes"] = redeemed
             save_progress(self.engine.current_progress)
@@ -487,7 +540,7 @@ class MenuScene(BaseScene):
                     elif event.key == pygame.K_RETURN:
                         Assets.sounds['enter'].play(); self._check_bonus_code()
                     else:
-                        if len(self.bonus_text) < 8 and event.unicode.upper() in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789":
+                        if len(self.bonus_text) < 10 and event.unicode.upper() in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789":
                             self.bonus_text += event.unicode.upper()
                 elif self.showSettings and self.settings_tab == "general" and self.nickname_input_active:
                     if event.key == pygame.K_BACKSPACE:
@@ -544,23 +597,34 @@ class MenuScene(BaseScene):
                     elif self.auth_btn.collidepoint(mx, my):
                         Assets.sounds['enter'].play(); self.engine.pick_random_emotion(); self.showAuthors = True
                     elif self.wheel_state == "idle" and self.spin_btn_rect.collidepoint(mx, my):
-                        if self.wheel_sound:
-                            v = 0.0 if self.engine.muting_sfx else self.engine.sfx_volume
-                            self.wheel_sound.set_volume(v)
-                            self.wheel_sound.play()
-                        self._build_wheel_pool()
-                        self.wheel_target_idx = random.randrange(len(self.wheel_pool))
-                        self.wheel_spin_start = pygame.time.get_ticks()
-                        self.wheel_state = "spinning"
-                        self.reel_y_start = self.reel_y
+                        free_spins = self.engine.current_progress.get("free_spins", 0)
+                        last_spin = self.engine.current_progress.get("last_spin_date", "")
+                        can_spin = (free_spins > 0) or (last_spin != getattr(self, 'today_date', ''))
 
-                        item_h = sc(60)
-                        total_h = len(self.wheel_pool) * item_h
+                        if can_spin:
+                            if free_spins > 0:
+                                self.engine.current_progress["free_spins"] = free_spins - 1
+                            else:
+                                self.engine.current_progress["last_spin_date"] = getattr(self, 'today_date', '')
+                            save_progress(self.engine.current_progress)
 
-                        align_y = self.wheel_target_idx * item_h - (self.reel_rect.height - item_h) // 2
-                        current_mod = self.reel_y_start % total_h
-                        diff = (align_y - current_mod) % total_h
-                        self.reel_y_target = self.reel_y_start + (6 * total_h) + diff
+                            if self.wheel_sound:
+                                v = 0.0 if self.engine.muting_sfx else self.engine.sfx_volume
+                                self.wheel_sound.set_volume(v)
+                                self.wheel_sound.play()
+                            self._build_wheel_pool()
+                            self.wheel_target_idx = random.randrange(len(self.wheel_pool))
+                            self.wheel_spin_start = pygame.time.get_ticks()
+                            self.wheel_state = "spinning"
+                            self.reel_y_start = self.reel_y
+
+                            item_h = sc(60)
+                            total_h = len(self.wheel_pool) * item_h
+
+                            align_y = self.wheel_target_idx * item_h - (self.reel_rect.height - item_h) // 2
+                            current_mod = self.reel_y_start % total_h
+                            diff = (align_y - current_mod) % total_h
+                            self.reel_y_target = self.reel_y_start + (6 * total_h) + diff
 
                 elif getattr(self, "showGameChoice", False):
                     if self.bj_btn.collidepoint(mx, my):
@@ -633,7 +697,9 @@ class MenuScene(BaseScene):
 
                 elif self.showSettings:
                     if getattr(self, "showBonusInput", False):
-                        if self.bonus_back_btn.collidepoint(mx, my):
+                        if self.bonus_activate_btn.collidepoint(mx, my):
+                            Assets.sounds['enter'].play(); self._check_bonus_code()
+                        elif self.bonus_back_btn.collidepoint(mx, my):
                             Assets.sounds['back'].play(); self.showBonusInput = False
                     else:
                         if self.settings_tab =="menu":
@@ -711,6 +777,7 @@ class MenuScene(BaseScene):
                             elif self.v_tab_emoji.collidepoint(mx, my): Assets.sounds['enter'].play(); self.visual_sub_tab = "emoji"; self.dropdown_open = None
 
                             is_gold_unlocked = "Golden" in self.engine.current_progress.get("skins_unlocked", ["Musa"])
+                            is_cyberpunk_unlocked = "Cyberpunk" in self.engine.current_progress.get("skins_unlocked", ["Musa"])
 
                             if self.visual_sub_tab == "bg":
                                 clicked_dropdown = False
@@ -726,6 +793,9 @@ class MenuScene(BaseScene):
                                 elif self.dropdown_open == "gold" and is_gold_unlocked:
                                     if self.btn_gold_bg1.collidepoint(mx, my): self.engine.set_theme_and_bg("gold", 1); self.dropdown_open = None; clicked_dropdown = True
                                     elif self.btn_gold_bg2.collidepoint(mx, my): self.engine.set_theme_and_bg("gold", 2); self.dropdown_open = None; clicked_dropdown = True
+                                elif self.dropdown_open == "cyberpunk" and is_cyberpunk_unlocked:
+                                    if self.btn_cyberpunk_bg1.collidepoint(mx, my): self.engine.set_theme_and_bg("cyberpunk", 1); self.dropdown_open = None; clicked_dropdown = True
+                                    elif self.btn_cyberpunk_bg2.collidepoint(mx, my): self.engine.set_theme_and_bg("cyberpunk", 2); self.dropdown_open = None; clicked_dropdown = True
 
                                 if not clicked_dropdown:
                                     if self.btn_red.collidepoint(mx, my): Assets.sounds['enter'].play(); self.dropdown_open = "red" if self.dropdown_open != "red" else None
@@ -733,6 +803,8 @@ class MenuScene(BaseScene):
                                     elif self.btn_blue.collidepoint(mx, my): Assets.sounds['enter'].play(); self.dropdown_open = "blue" if self.dropdown_open != "blue" else None
                                     elif is_gold_unlocked and getattr(self, 'btn_gold', None) and self.btn_gold.collidepoint(mx, my):
                                         Assets.sounds['enter'].play(); self.dropdown_open = "gold" if self.dropdown_open != "gold" else None
+                                    elif is_cyberpunk_unlocked and getattr(self, 'btn_cyberpunk', None) and self.btn_cyberpunk.collidepoint(mx, my):
+                                        Assets.sounds['enter'].play(); self.dropdown_open = "cyberpunk" if self.dropdown_open != "cyberpunk" else None
                                     else: self.dropdown_open = None
 
                             elif self.visual_sub_tab == "comp":
@@ -747,6 +819,10 @@ class MenuScene(BaseScene):
                                 elif is_gold_unlocked and getattr(self, 'btn_comp_gold', None) and self.btn_comp_gold.collidepoint(mx, my):
                                     Assets.sounds['enter'].play(); self.engine.current_companion = "gold"; self.engine.pick_random_emotion()
                                     self.engine.current_settings["companion"] = self.engine.current_companion; save_settings(self.engine.current_settings)
+                                elif is_cyberpunk_unlocked and getattr(self, 'btn_comp_cyberpunk', None) and self.btn_comp_cyberpunk.collidepoint(mx, my):
+                                    Assets.sounds['enter'].play(); self.engine.current_companion = "cyberpunk"; self.engine.pick_random_emotion()
+                                    self.engine.current_settings["companion"] = self.engine.current_companion; save_settings(self.engine.current_settings)
+
 
                             elif self.visual_sub_tab == "emoji":
                                 for pack_name, rect in self.get_emoji_pack_rects():
@@ -757,6 +833,10 @@ class MenuScene(BaseScene):
                                         self.engine.current_settings["emoji_pack"] = pack_name
                                         save_settings(self.engine.current_settings)
                                         break
+                        elif self.settings_tab == "tutorial":
+                            if self.tut_tab_bj.collidepoint(mx, my): Assets.sounds['enter'].play(); self.tutorial_sub_tab = "blackjack"
+                            elif self.tut_tab_durak.collidepoint(mx, my): Assets.sounds['enter'].play(); self.tutorial_sub_tab = "durak"
+                            elif self.tut_tab_poker.collidepoint(mx, my): Assets.sounds['enter'].play(); self.tutorial_sub_tab = "poker"
 
             if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                 if self.music_slider_dragging:
@@ -791,12 +871,19 @@ class MenuScene(BaseScene):
         if getattr(self, "showGameChoice", False):
             draw_text_centered(window, t("Select Game"), Assets.fonts['f150'], (255, 255, 255), (0, 0, 0), (self.cx, int(self.engine.HEIGHT * 0.12), 0, 0), int(sc(5)))
 
-            for btn, img_key, label in [(self.bj_btn, 'blackjack_choice', t("BlackJack")), (self.fool_btn, 'fool_choice', t("Durak")), (self.poker_btn, 'poker_choice', t("Texas Hold'em"))]:
+            prefix = ""
+            if self.engine.current_theme == "gold":
+                prefix = "gold_"
+            elif self.engine.current_theme == "cyberpunk":
+                prefix = "cyberpunk_"
+
+            for btn, base_key, label in [(self.bj_btn, 'blackjack_choice', t("BlackJack")), (self.fool_btn, 'fool_choice', t("Durak")), (self.poker_btn, 'poker_choice', t("Texas Hold'em"))]:
+                img_key = f"{prefix}{base_key}"
                 h = btn.collidepoint(mx, my)
                 bg_rect = btn.inflate(int(sc(20)), int(sc(20)))
                 draw_alpha_rect(window, (0, 0, 0, 160), bg_rect, "gradient" if h else (245, 245, 245), int(sc(3)), int(sc(15)))
 
-                img = Assets.images.get(img_key)
+                img = Assets.images.get(img_key, Assets.images.get(base_key))
                 if img:
                     scaled_img = pygame.transform.smoothscale(img, (btn.width, btn.height))
                     img_rect = scaled_img.get_rect(center=btn.center)
@@ -804,7 +891,7 @@ class MenuScene(BaseScene):
                 else:
                     draw_text_centered(window, "?", Assets.fonts.get('f150', Assets.fonts['f100']), (100, 100, 100), (0, 0, 0), btn)
 
-                draw_text_centered(window, label, Assets.fonts['f60'], (255,255,255), (0,0,0), (btn.x, int(btn.bottom + sc(40)), btn.width, 0), int(sc(2)))
+                draw_text_centered(window, label, Assets.fonts['f40'], (255,255,255), (0,0,0), (btn.x, int(btn.bottom + sc(40)), btn.width, 0), int(sc(2)))
 
             hovered = self.back_btn.collidepoint(mx, my)
             draw_text_centered(window, t("Back"), Assets.fonts['f100'] if hovered else Assets.fonts['f80'], "gradient" if hovered else (245, 245, 245), (0, 0, 0), self.back_btn, int(sc(4)) if hovered else int(sc(3)))
@@ -814,10 +901,19 @@ class MenuScene(BaseScene):
             theme = self.engine.current_theme
 
             if self.engine.current_companion == "blond":
-                theme_for_blond = theme if theme in Assets.companions['girl_blond'] else 'red'
-                active_devushka = Assets.companions['girl_blond'][theme_for_blond].get(emo, Assets.companions['girl_blond'][theme_for_blond].get('main'))
+                if theme in ["gold", "cyberpunk"]:
+                    theme_for_blond = 'white'
+                else:
+                    theme_for_blond = theme if theme in Assets.companions['girl_blond'] else 'red'
+
+                blond_dict = Assets.companions['girl_blond'].get(theme_for_blond, {})
+                active_devushka = blond_dict.get(emo) or blond_dict.get('main')
+                if not active_devushka and blond_dict:
+                    active_devushka = list(blond_dict.values())[0]
             elif self.engine.current_companion == "gold":
                 active_devushka = Assets.companions['girl_gold'].get(emo, Assets.companions['girl_gold'].get('main'))
+            elif self.engine.current_companion == "cyberpunk":
+                active_devushka = Assets.companions['girl_cyberpunk'].get(emo, Assets.companions['girl_cyberpunk'].get('main'))
             else:
                 active_devushka = Assets.companions['girl_red'].get(emo, Assets.companions['girl_red'].get('main'))
 
@@ -828,18 +924,31 @@ class MenuScene(BaseScene):
                     comp_x = int(self.engine.WIDTH - active_devushka.get_width() - gold_offset_x)
                     comp_y = int(self.engine.HEIGHT - active_devushka.get_height() - gold_offset_y)
                 else:
-                    offset_x = sc(5) if self.engine.current_companion in ["blond", "gold"] else sc(20)
+                    offset_x = sc(5) if self.engine.current_companion in ["blond", "gold", "cyberpunk"] else sc(20)
                     comp_x = int(self.engine.WIDTH - active_devushka.get_width() - offset_x)
                     comp_y = int(self.engine.HEIGHT - active_devushka.get_height())
 
                 window.blit(active_devushka, (comp_x, comp_y))
 
-            for btn, img in [(self.mode1_btn, self.player_menu), (self.mode2_btn, self.players_img)]:
+            if self.engine.current_theme == "cyberpunk":
+                p1_img = Assets.images.get('cyberpunk_1player', self.player_menu)
+                p2_img = Assets.images.get('cyberpunk_2players', self.players_img)
+            else:
+                p1_img = self.player_menu
+                p2_img = self.players_img
+
+            for btn, img in [(self.mode1_btn, p1_img), (self.mode2_btn, p2_img)]:
                 h = btn.collidepoint(mx, my)
                 bg_rect = btn.inflate(int(sc(30)), int(sc(30)))
                 draw_alpha_rect(window, (0, 0, 0, 160), bg_rect, "gradient" if h else (245, 245, 245), int(sc(3)), int(sc(15)))
-                img_rect = img.get_rect(center=btn.center)
-                window.blit(img, img_rect.topleft)
+
+                scale = min(btn.width / img.get_width(), btn.height / img.get_height())
+                nw, nh = int(img.get_width() * scale), int(img.get_height() * scale)
+                scaled_icon = pygame.transform.smoothscale(img, (nw, nh))
+
+                img_rect = scaled_icon.get_rect(center=btn.center)
+                window.blit(scaled_icon, img_rect.topleft)
+
             draw_text_centered(window, t("Single play"), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (self.mode1_btn.x, int(self.mode1_btn.bottom + sc(60)), self.mode1_btn.width, 0), int(sc(2)))
             draw_text_centered(window, t("Multiplayer"), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (self.mode2_btn.x, int(self.mode2_btn.bottom + sc(60)), self.mode2_btn.width, 0), int(sc(2)))
             hovered = self.back_btn.collidepoint(mx, my)
@@ -895,6 +1004,12 @@ class MenuScene(BaseScene):
                 draw_text_centered(window, self.bonus_text + cursor_str, Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), self.bonus_input_rect)
                 if pygame.time.get_ticks() < getattr(self, "bonus_message_timer", 0):
                     draw_text_centered(window, self.bonus_message, Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (self.cx, int(self.cy + sc(80)), 0, 0), 0)
+
+                h_act = self.bonus_activate_btn.collidepoint(mx, my)
+                draw_alpha_rect(window, (0, 0, 0, 160), self.bonus_activate_btn, "gradient" if h_act else (245,245,245), int(sc(3)), int(sc(15)))
+                act_txt = "Activate" if get_language() == "en" else "Активировать"
+                draw_text_centered(window, act_txt, Assets.fonts['f30'] if h_act else Assets.fonts['f25'], "gradient" if h_act else (245, 245, 245), (0, 0, 0), self.bonus_activate_btn, int(sc(3)) if h_act else int(sc(2)))
+
                 h_b = self.bonus_back_btn.collidepoint(mx, my)
                 draw_alpha_rect(window, (0, 0, 0, 160), self.bonus_back_btn, "gradient" if h_b else (245,245,245), int(sc(3)), int(sc(15)))
                 draw_text_centered(window, t("Back"), Assets.fonts['f40'] if h_b else Assets.fonts['f30'], "gradient" if h_b else (245, 245, 245), (0, 0, 0), self.bonus_back_btn, int(sc(3)) if h_b else int(sc(2)))
@@ -1005,6 +1120,7 @@ class MenuScene(BaseScene):
                 elif self.settings_tab == "themes":
                     is_lei_unlocked = "Lei" in self.engine.current_progress.get("skins_unlocked", ["Musa"])
                     is_gold_unlocked = "Golden" in self.engine.current_progress.get("skins_unlocked", ["Musa"])
+                    is_cyberpunk_unlocked = "Cyberpunk" in self.engine.current_progress.get("skins_unlocked", ["Musa"])
 
                     for t_id, btn, txt in [("bg", self.v_tab_bg, t("Themes & BG")), ("comp", self.v_tab_comp, t("Companions")), ("emoji", self.v_tab_emoji, t("Emojis"))]:
                         is_active = (self.visual_sub_tab == t_id)
@@ -1013,11 +1129,11 @@ class MenuScene(BaseScene):
                         draw_text_centered(window, txt, Assets.fonts['text50'], "gradient" if is_active else ((255,255,255) if h else (180,180,180)), (0,0,0), btn, int(sc(2)))
 
                     if self.visual_sub_tab == "bg":
-                        themes_btns = [("red", self.btn_red, t("Red")), ("green", self.btn_green, t("Green")), ("blue", self.btn_blue, t("Blue"))]
-                        if is_gold_unlocked:
-                            themes_btns.append(("gold", self.btn_gold, t("Golden")))
+                        active_bgs_opts = [("red", self.btn_red, t("Red")), ("green", self.btn_green, t("Green")), ("blue", self.btn_blue, t("Blue"))]
+                        if is_gold_unlocked: active_bgs_opts.append(("gold", self.btn_gold, t("Golden")))
+                        if is_cyberpunk_unlocked: active_bgs_opts.append(("cyberpunk", self.btn_cyberpunk, t("Cyberpunk")))
 
-                        for t_id, btn, txt in themes_btns:
+                        for t_id, btn, txt in active_bgs_opts:
                             h = btn.collidepoint(mx, my) or self.dropdown_open == t_id
                             draw_alpha_rect(window, (0, 0, 0, 160), btn, "gradient" if h else (245,245,245), int(sc(3)), int(sc(10)))
                             draw_text_centered(window, txt, Assets.fonts['text50'], "gradient" if h else (255,255,255), (0,0,0), btn, int(sc(2)))
@@ -1039,6 +1155,11 @@ class MenuScene(BaseScene):
                                 draw_text_centered(window, txt, Assets.fonts['text30'], "gradient" if h else (255,255,255), (0,0,0), b, int(sc(2)))
                         elif self.dropdown_open == "gold" and is_gold_unlocked:
                             for b, txt in [(self.btn_gold_bg1, t("Background 1")), (self.btn_gold_bg2, t("Background 2"))]:
+                                h = b.collidepoint(mx, my)
+                                draw_alpha_rect(window, (0, 0, 0, 160), b, "gradient" if h else (245,245,245), int(sc(3)), int(sc(10)))
+                                draw_text_centered(window, txt, Assets.fonts['text30'], "gradient" if h else (255,255,255), (0,0,0), b, int(sc(2)))
+                        elif self.dropdown_open == "cyberpunk" and is_cyberpunk_unlocked:
+                            for b, txt in [(self.btn_cyberpunk_bg1, t("Background 1")), (self.btn_cyberpunk_bg2, t("Background 2"))]:
                                 h = b.collidepoint(mx, my)
                                 draw_alpha_rect(window, (0, 0, 0, 160), b, "gradient" if h else (245,245,245), int(sc(3)), int(sc(10)))
                                 draw_text_centered(window, txt, Assets.fonts['text30'], "gradient" if h else (255,255,255), (0,0,0), b, int(sc(2)))
@@ -1068,6 +1189,15 @@ class MenuScene(BaseScene):
                                 window.blit(gold_scaled, self.btn_comp_gold.topleft)
                             draw_text_centered(window, t("Golden Musa"), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (self.btn_comp_gold.x, int(self.btn_comp_gold.bottom + sc(40)), self.btn_comp_gold.width, 0), int(sc(2)))
 
+                        if is_cyberpunk_unlocked:
+                            h_c = self.btn_comp_cyberpunk.collidepoint(mx, my) or self.engine.current_companion == "cyberpunk"
+                            bg_c = self.btn_comp_cyberpunk.inflate(int(sc(20)), int(sc(20)))
+                            draw_alpha_rect(window, (0, 0, 0, 160), bg_c, "gradient" if h_c else (245,245,245), int(sc(3)), int(sc(15)))
+                            if 'logo_cyberpunk' in Assets.images:
+                                cyber_scaled = pygame.transform.smoothscale(Assets.images['logo_cyberpunk'], (self.btn_comp_cyberpunk.width, self.btn_comp_cyberpunk.height))
+                                window.blit(cyber_scaled, self.btn_comp_cyberpunk.topleft)
+                            draw_text_centered(window, t("Cyberpunk Lei"), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (self.btn_comp_cyberpunk.x, int(self.btn_comp_cyberpunk.bottom + sc(40)), self.btn_comp_cyberpunk.width, 0), int(sc(2)))
+
                     elif self.visual_sub_tab == "emoji":
                         current_pack = self.engine.current_settings.get("emoji_pack", "Standard")
                         for pack_name, rect in self.get_emoji_pack_rects():
@@ -1081,6 +1211,41 @@ class MenuScene(BaseScene):
                                 pack_img = Assets.images[logo_key]
                                 p_rect = pack_img.get_rect(center=rect.center)
                                 window.blit(pack_img, p_rect.topleft)
+
+                elif self.settings_tab == "tutorial":
+                    for t_id, btn, txt in [("blackjack", self.tut_tab_bj, t("BlackJack")), ("durak", self.tut_tab_durak, t("Durak")), ("poker", self.tut_tab_poker, t("Texas Hold'em"))]:
+                        is_active = (self.tutorial_sub_tab == t_id)
+                        h = btn.collidepoint(mx, my) or is_active
+                        draw_alpha_rect(window, (0, 0, 0, 160), btn, "gradient" if is_active else ((245,245,245) if h else (150,150,150)), int(sc(3)) if is_active else int(sc(2)), int(sc(15)))
+                        draw_text_centered(window, txt, Assets.fonts['text40'], "gradient" if is_active else ((255,255,255) if h else (180,180,180)), (0,0,0), btn, int(sc(2)))
+
+                    panel_rect = pygame.Rect(int(self.cx - sc(550)), int(self.engine.HEIGHT * 0.35), int(sc(1100)), int(sc(450)))
+                    draw_alpha_rect(window, (0, 0, 0, 160), panel_rect, "gradient", int(sc(3)), int(sc(15)))
+
+                    rules_text = t(self.tutorial_sub_tab + "_rules")
+                    font = Assets.fonts['text40']
+                    max_w = panel_rect.width - int(sc(60))
+
+                    wrapped_lines = []
+                    for paragraph in rules_text.split('\n'):
+                        words = paragraph.split(' ')
+                        current_line = []
+                        for word in words:
+                            test_line = ' '.join(current_line + [word])
+                            if font.size(test_line)[0] <= max_w:
+                                current_line.append(word)
+                            else:
+                                if current_line:
+                                    wrapped_lines.append(' '.join(current_line))
+                                current_line = [word]
+                        if current_line:
+                            wrapped_lines.append(' '.join(current_line))
+
+                    line_height = int(sc(40))
+                    y_offset = panel_rect.y + int(sc(35))
+                    for line in wrapped_lines:
+                        draw_text_centered(window, line, font, (255, 255, 255), (0, 0, 0), (panel_rect.x, y_offset, panel_rect.width, line_height), int(sc(2)))
+                        y_offset += line_height
 
                 if not getattr(self, "showBonusInput", False):
                     hovered = self.back_btn.collidepoint(mx, my)
@@ -1100,10 +1265,19 @@ class MenuScene(BaseScene):
             theme = self.engine.current_theme
 
             if self.engine.current_companion == "blond":
-                theme_for_blond = theme if theme in Assets.companions['girl_blond'] else 'red'
-                active_devushka = Assets.companions['girl_blond'][theme_for_blond].get(emo, Assets.companions['girl_blond'][theme_for_blond].get('main'))
+                if theme in ["gold", "cyberpunk"]:
+                    theme_for_blond = 'white'
+                else:
+                    theme_for_blond = theme if theme in Assets.companions['girl_blond'] else 'red'
+
+                blond_dict = Assets.companions['girl_blond'].get(theme_for_blond, {})
+                active_devushka = blond_dict.get(emo) or blond_dict.get('main')
+                if not active_devushka and blond_dict:
+                    active_devushka = list(blond_dict.values())[0]
             elif self.engine.current_companion == "gold":
                 active_devushka = Assets.companions['girl_gold'].get(emo, Assets.companions['girl_gold'].get('main'))
+            elif self.engine.current_companion == "cyberpunk":
+                active_devushka = Assets.companions['girl_cyberpunk'].get(emo, Assets.companions['girl_cyberpunk'].get('main'))
             else:
                 active_devushka = Assets.companions['girl_red'].get(emo, Assets.companions['girl_red'].get('main'))
 
@@ -1114,7 +1288,7 @@ class MenuScene(BaseScene):
                     comp_x = int(self.engine.WIDTH - active_devushka.get_width() - gold_offset_x)
                     comp_y = int(self.engine.HEIGHT - active_devushka.get_height() - gold_offset_y)
                 else:
-                    offset_x = sc(5) if self.engine.current_companion in ["blond", "gold"] else sc(20)
+                    offset_x = sc(5) if self.engine.current_companion in ["blond", "gold", "cyberpunk"] else sc(20)
                     comp_x = int(self.engine.WIDTH - active_devushka.get_width() - offset_x)
                     comp_y = int(self.engine.HEIGHT - active_devushka.get_height())
 
@@ -1180,11 +1354,38 @@ class MenuScene(BaseScene):
             rp3 = (self.reel_rect.right - sc(5), self.reel_rect.centery)
             pygame.draw.polygon(window, (255, 0, 0), [rp1, rp2, rp3])
 
+            free_spins = self.engine.current_progress.get("free_spins", 0)
+            last_spin = self.engine.current_progress.get("last_spin_date", "")
+            can_spin = (free_spins > 0) or (last_spin != getattr(self, 'today_date', ''))
+
             if self.wheel_state == "idle":
-                spin_lbl = "SPIN!" if get_language() == "en" else "КРУТИТЬ!"
-                h = self.spin_btn_rect.collidepoint(mx, my)
-                draw_alpha_rect(window, (0, 0, 0, 160), self.spin_btn_rect, "gradient" if h else (245, 245, 245), int(sc(3)), int(sc(15)))
-                draw_text_centered(window, spin_lbl, Assets.fonts['f20'] if h else Assets.fonts['f18'], "gradient" if h else (245, 245, 245), (0, 0, 0), self.spin_btn_rect, int(sc(3)) if h else int(sc(2)))
+                if can_spin:
+                    spin_lbl = "SPIN!" if get_language() == "en" else "КРУТИТЬ!"
+                    h = self.spin_btn_rect.collidepoint(mx, my)
+                    draw_alpha_rect(window, (0, 0, 0, 160), self.spin_btn_rect, "gradient" if h else (245, 245, 245), int(sc(3)), int(sc(15)))
+                    draw_text_centered(window, spin_lbl, Assets.fonts['f20'] if h else Assets.fonts['f18'], "gradient" if h else (245, 245, 245), (0, 0, 0), self.spin_btn_rect, int(sc(3)) if h else int(sc(2)))
+
+                    if free_spins > 0:
+                        badge_rect = pygame.Rect(self.spin_btn_rect.right - sc(25), self.spin_btn_rect.top - sc(15), int(sc(40)), int(sc(40)))
+                        pygame.draw.circle(window, (255, 50, 50), badge_rect.center, int(sc(18)))
+                        pygame.draw.circle(window, (255, 215, 0), badge_rect.center, int(sc(18)), width=int(sc(2)))
+                        draw_text_centered(window, str(free_spins), Assets.fonts['text20'], (255,255,255), (0,0,0), badge_rect)
+                else:
+                    now = datetime.now()
+                    next_day = datetime(now.year, now.month, now.day) + timedelta(days=1)
+                    diff = next_day - now
+                    hours, remainder = divmod(int(diff.total_seconds()), 3600)
+                    minutes, seconds = divmod(remainder, 60)
+                    timer_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+                    draw_alpha_rect(window, (0, 0, 0, 100), self.spin_btn_rect, (80, 80, 80), int(sc(1)), int(sc(15)))
+
+                    timer_rect = pygame.Rect(self.spin_btn_rect.x, self.spin_btn_rect.y + int(sc(10)), self.spin_btn_rect.width, int(sc(30)))
+                    wait_rect = pygame.Rect(self.spin_btn_rect.x, self.spin_btn_rect.y + int(sc(40)), self.spin_btn_rect.width, int(sc(30)))
+
+                    draw_text_centered(window, timer_str, Assets.fonts['text20'], (255, 215, 0), (0, 0, 0), timer_rect)
+                    spin_lbl = "WAIT" if get_language() == "en" else "ЖДИТЕ"
+                    draw_text_centered(window, spin_lbl, Assets.fonts['text20'], (150, 150, 150), (0, 0, 0), wait_rect)
             else:
                 spin_lbl = "SPINNING" if get_language() == "en" else "КРУТИМ"
                 draw_alpha_rect(window, (0, 0, 0, 100), self.spin_btn_rect, (80, 80, 80), int(sc(1)), int(sc(15)))

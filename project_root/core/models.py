@@ -1,5 +1,6 @@
 import random
 import os
+from utils.utils import Config
 
 SUITS = ["clubs", "diamonds", "hearts", "spades"]
 
@@ -102,7 +103,8 @@ class Chip:
             if value == 0:
                 self.texture_path = "None"
             else:
-                self.texture_path = os.path.join("textures", "chips", valid_values[value])
+                theme = getattr(Config, 'chip_theme', 'default')
+                self.texture_path = os.path.join("textures", "chips", theme, valid_values[value])
             return True
         return False
 

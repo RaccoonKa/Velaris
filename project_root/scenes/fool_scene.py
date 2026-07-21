@@ -58,7 +58,7 @@ class FoolScene(BaseScene):
         self.defender_pid = None
         self.taking = False
 
-        self.card_w, self.card_h = sc(140), sc(190)
+        self.card_w, self.card_h = sc(190), sc(250)
         self.cx, self.cy = int(self.engine.WIDTH // 2), int(self.engine.HEIGHT // 2)
         self.deck_pos = (int(self.engine.WIDTH - sc(200)), int(self.cy - sc(100)))
 
@@ -93,13 +93,22 @@ class FoolScene(BaseScene):
             rad = math.radians(a)
             pos.append((int(mc_x + math.cos(rad) * rx - self.cw // 2), int(mc_y + math.sin(rad) * ry - self.ch // 2)))
 
-        self.set_bet_100 = Button(pos[0][0], pos[0][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_100.set_button_texture(os.path.join("textures", "chips", "100.png"))
-        self.set_bet_250 = Button(pos[1][0], pos[1][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_250.set_button_texture(os.path.join("textures", "chips", "250.png"))
-        self.set_bet_500 = Button(pos[2][0], pos[2][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_500.set_button_texture(os.path.join("textures", "chips", "500.png"))
-        self.set_bet_1000 = Button(pos[3][0], pos[3][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_1000.set_button_texture(os.path.join("textures", "chips", "1000.png"))
-        self.set_bet_2500 = Button(pos[4][0], pos[4][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_2500.set_button_texture(os.path.join("textures", "chips", "2500.png"))
-        self.set_bet_10000 = Button(pos[5][0], pos[5][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_10000.set_button_texture(os.path.join("textures", "chips", "10000.png"))
+        theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
 
+        self.set_bet_100 = Button(pos[0][0], pos[0][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_100.set_button_texture(os.path.join("textures", "chips", theme, "100.png"))
+        self.set_bet_250 = Button(pos[1][0], pos[1][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_250.set_button_texture(os.path.join("textures", "chips", theme, "250.png"))
+        self.set_bet_500 = Button(pos[2][0], pos[2][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_500.set_button_texture(os.path.join("textures", "chips", theme, "500.png"))
+        self.set_bet_1000 = Button(pos[3][0], pos[3][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_1000.set_button_texture(os.path.join("textures", "chips", theme, "1000.png"))
+        self.set_bet_2500 = Button(pos[4][0], pos[4][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_2500.set_button_texture(os.path.join("textures", "chips", theme, "2500.png"))
+        self.set_bet_10000 = Button(pos[5][0], pos[5][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_10000.set_button_texture(os.path.join("textures", "chips", theme, "10000.png"))
+
+        if self.engine.current_theme == "cyberpunk":
+            self.w_c = int(sc(150))
+        else:
+            self.w_c = int(sc(120))
+
+        self.cw, self.ch = int(self.w_c * 1.7), int(self.w_c * 0.9)
+        
     def get_title_color(self, title):
         if title in ["Разработчик", "Developer", "Millionaire", "Миллионер", "Крути-вези!", "I got lucky!"]:
             t_ms = pygame.time.get_ticks()
@@ -115,8 +124,30 @@ class FoolScene(BaseScene):
         }
 
     def _get_cached_texture(self, path, size):
+        if self.engine.current_theme == "cyberpunk":
+            path = path.replace("cards_wood", "cards_cyberpunk")
+
         if path not in self.texture_cache:
-            self.texture_cache[path] = load_img(path, size)
+            if self.engine.current_theme == "cyberpunk":
+                raw_img = load_img(path)
+                img_w, img_h = raw_img.get_size()
+                target_w, target_h = size
+
+                ratio = max(target_w / img_w, target_h / img_h)
+                new_w = int(img_w * ratio)
+                new_h = int(img_h * ratio)
+
+                scaled_img = pygame.transform.smoothscale(raw_img, (new_w, new_h))
+                final_img = pygame.Surface(size, pygame.SRCALPHA)
+
+                offset_x = (target_w - new_w) // 2
+                offset_y = (target_h - new_h) // 2
+                final_img.blit(scaled_img, (offset_x, offset_y))
+
+                self.texture_cache[path] = final_img
+            else:
+                self.texture_cache[path] = load_img(path, size)
+
         return self.texture_cache[path]
 
     def _deal_animated(self, c, end_x, end_y, on_finish, img=None):
@@ -137,6 +168,14 @@ class FoolScene(BaseScene):
         self.mode = mode
         self.engine.switch_music(self.engine.current_theme, "game")
         self.reset_game_state(full_reset=True)
+
+        theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
+        self.set_bet_100.set_button_texture(os.path.join("textures", "chips", theme, "100.png"))
+        self.set_bet_250.set_button_texture(os.path.join("textures", "chips", theme, "250.png"))
+        self.set_bet_500.set_button_texture(os.path.join("textures", "chips", theme, "500.png"))
+        self.set_bet_1000.set_button_texture(os.path.join("textures", "chips", theme, "1000.png"))
+        self.set_bet_2500.set_button_texture(os.path.join("textures", "chips", theme, "2500.png"))
+        self.set_bet_10000.set_button_texture(os.path.join("textures", "chips", theme, "10000.png"))
 
         if self.mode in ["singleplayer", "multiplayer_host"]:
             self.engine.my_id = 0
@@ -251,7 +290,7 @@ class FoolScene(BaseScene):
 
     def get_player_hand_pos(self, pid):
         if pid == self.engine.my_id:
-            return self.cx, int(self.engine.HEIGHT - sc(200))
+            return self.cx, int(self.engine.HEIGHT - sc(250))
         else:
             return self.get_player_center(pid), int(sc(100))
 
@@ -380,8 +419,9 @@ class FoolScene(BaseScene):
                     rem %= d
 
         chips.reverse()
+        theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
         for i, c in enumerate(chips):
-            img = self._get_cached_texture(os.path.join("textures", "chips", f"{c}.png"), (self.cw, self.ch))
+            img = self._get_cached_texture(os.path.join("textures", "chips", theme, f"{c}.png"), (self.cw, self.ch))
             self.placed_chips.append((img, (int(px), int(self.deck_pos[1] + sc(30) - i * sc(8)))))
 
     def _handle_chip_click(self, mx, my):
@@ -405,26 +445,44 @@ class FoolScene(BaseScene):
                 self.money[self.engine.my_id] -= bet_val
                 self.engine.current_progress["money"] = self.money[self.engine.my_id]
                 save_progress(self.engine.current_progress)
-                c_img = self._get_cached_texture(os.path.join("textures", "chips", f"{bet_val}.png"), (self.cw, self.ch))
+                theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
+                c_img = self._get_cached_texture(os.path.join("textures", "chips", theme, f"{bet_val}.png"), (self.cw, self.ch))
                 px = self.deck_pos[0] - sc(250)
-                anim_start = (int(self.mountain_pos[0] + Assets.images['all_chips'].get_width() // 2), int(self.mountain_pos[1] + Assets.images['all_chips'].get_height() // 2))
+                anim_start = (int(self.mountain_pos[0] + sc(100)), int(self.mountain_pos[1] + sc(80)))
                 total_val = sum(p.get_bet().get_value() for p in self.players.values())
                 count = sum(total_val // d for d in [10000, 2500, 1000, 500, 250, 100])
-                anim_end = (int(px), int(self.deck_pos[1] + sc(30) - max(0, count - 1) * sc(8)))
+                anim_end = (int(px - self.cw // 2), int(self.cy - self.ch // 2 - max(0, count - 1) * sc(8)))
                 self.animator.add(c_img, anim_start, anim_end, self.rebuild_placed_chips, 20)
                 if self.engine.server: self.engine.server.broadcast({"action": "bet", "id": self.engine.my_id, "val": bet_val})
 
     def handle_events(self, events):
         mx, my = self.engine.mx, self.engine.my
 
-        emoji_btn_rect = pygame.Rect(int(self.cx + sc(260)), int(self.engine.HEIGHT - sc(200)), self.emoji_btn_size, self.emoji_btn_size)
+        emoji_btn_rect = pygame.Rect(int(self.cx + sc(280)), int(self.engine.HEIGHT - sc(200)), self.emoji_btn_size, self.emoji_btn_size)
 
         for event in events:
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+                if self.game_phase == "betting" and self.engine.my_id not in self.ready_to_play:
+                    current_bet = self.players[self.engine.my_id].get_bet().get_value() if self.engine.my_id in self.players else 0
+                    if current_bet > 0:
+                        if self.mode == "multiplayer_client":
+                            if self.engine.client:
+                                self.engine.client.send_data({"action": "cancel_bet"})
+                        else:
+                            Assets.sounds['chip'].play()
+                            self.money[self.engine.my_id] += current_bet
+                            self.players[self.engine.my_id].get_bet().value = 0
+                            self.engine.current_progress["money"] = self.money[self.engine.my_id]
+                            save_progress(self.engine.current_progress)
+                            self.rebuild_placed_chips()
+                            if self.engine.server:
+                                self.engine.server.broadcast({"action": "cancel_bet", "id": self.engine.my_id})
+
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if self.animator.queue and self.game_phase != "betting": return
 
                 if self.emoji_panel_open:
-                    panel_rect = pygame.Rect(int(self.cx + sc(260)), int(self.engine.HEIGHT - sc(390)), int(sc(350)), int(sc(180)))
+                    panel_rect = pygame.Rect(int(self.cx + sc(280)), int(self.engine.HEIGHT - sc(390)), int(sc(350)), int(sc(180)))
                     if panel_rect.collidepoint(mx, my):
                         rel_x = mx - panel_rect.x - sc(15)
                         rel_y = my - panel_rect.y - sc(15)
@@ -506,9 +564,11 @@ class FoolScene(BaseScene):
                             return
 
                     my_hand = self.players[self.engine.my_id].get_deck().cards
+                    card_spacing = min(sc(40), sc(320) / max(1, len(my_hand)))
+                    shift_x = max(0, (len(my_hand) - 6) * sc(18))
                     for i, c in reversed(list(enumerate(my_hand))):
-                        cx = int(self.cx - (len(my_hand) * sc(40)) // 2 + i * sc(40))
-                        cy = int(self.engine.HEIGHT - sc(200))
+                        cx = int(self.cx - shift_x - (len(my_hand) * card_spacing) // 2 + i * card_spacing)
+                        cy = int(self.engine.HEIGHT - sc(250))
                         if self.hovered_card == c:
                             cy -= sc(20)
                         rect = pygame.Rect(cx, cy, self.card_w, self.card_h)
@@ -520,9 +580,11 @@ class FoolScene(BaseScene):
                 if self.game_phase not in ["waiting", "game_over", "betting", "shuffling", "dealing"]:
                     my_hand = self.players[self.engine.my_id].get_deck().cards if self.engine.my_id in self.players else []
                     self.hovered_card = None
+                    card_spacing = min(sc(40), sc(320) / max(1, len(my_hand)))
+                    shift_x = max(0, (len(my_hand) - 6) * sc(18))
                     for i, c in reversed(list(enumerate(my_hand))):
-                        cx = int(self.cx - (len(my_hand) * sc(40)) // 2 + i * sc(40))
-                        cy = int(self.engine.HEIGHT - sc(200))
+                        cx = int(self.cx - shift_x - (len(my_hand) * card_spacing) // 2 + i * card_spacing)
+                        cy = int(self.engine.HEIGHT - sc(250))
                         rect = pygame.Rect(cx, cy, self.card_w, self.card_h)
                         if rect.collidepoint(mx, my):
                             self.hovered_card = c
@@ -703,7 +765,7 @@ class FoolScene(BaseScene):
         if len(self.deck) > 0 and self.game_phase not in ["betting"]:
             for i in range(min(5, len(self.deck))):
                 window.blit(shirt, (self.deck_pos[0] - i * 2, self.deck_pos[1] - i * 2))
-            draw_text_centered(window, str(len(self.deck)), Assets.fonts['text30'], (255,255,255), (0,0,0), (self.deck_pos[0], self.deck_pos[1] - sc(30), self.card_w, sc(30)))
+            draw_text_centered(window, str(len(self.deck)), Assets.fonts['text50'], (255,255,255), (0,0,0), (self.deck_pos[0], self.deck_pos[1] - sc(60), self.card_w, sc(30)))
 
         for i, pair in enumerate(self.table_cards):
             ax = self.cx - sc(200) + i * sc(85)
@@ -722,23 +784,25 @@ class FoolScene(BaseScene):
                 px = self.cx
             else:
                 px = self.get_player_center(pid)
-                
+
             p_text = self.engine.nickname_text if pid == self.engine.my_id else f"{t('Player ')}{pid + 1}"
             p_title = self.player_titles.get(pid, "Новичок") if pid != self.engine.my_id else self.engine.current_progress.get("current_title", "Новичок")
 
             if pid == self.engine.my_id:
-                text_y_start = int(self.engine.HEIGHT - sc(320))
+                text_y_start = int(self.engine.HEIGHT - sc(360))
             else:
-                text_y_start = int(sc(220))
+                text_y_start = int(sc(280))
 
             draw_text_centered(window, f"[{t(p_title)}]", Assets.fonts['text30'], self.get_title_color(p_title), (0, 0, 0), (int(px - sc(100)), text_y_start, int(sc(200)), int(sc(30))), int(sc(2)))
             draw_text_centered(window, p_text, Assets.fonts['text30'], (255,255,255), (0,0,0), (int(px - sc(100)), text_y_start + int(sc(35)), int(sc(200)), int(sc(30))), int(sc(2)))
             draw_text_centered(window, f"{t('Bet:')} {p.get_bet().get_value()}", Assets.fonts['text30'], (255, 255, 255), (0, 0, 0), (int(px - sc(100)), text_y_start + int(sc(70)), int(sc(200)), int(sc(30))), int(sc(2)))
 
             if pid == self.engine.my_id:
+                card_spacing = min(sc(40), sc(320) / max(1, len(hand)))
+                shift_x = max(0, (len(hand) - 6) * sc(18))
                 for i, c in enumerate(hand):
-                    cx = int(px - (len(hand) * sc(40)) // 2 + i * sc(40))
-                    cy = int(self.engine.HEIGHT - sc(200))
+                    cx = int(px - shift_x - (len(hand) * card_spacing) // 2 + i * card_spacing)
+                    cy = int(self.engine.HEIGHT - sc(250))
                     if self.hovered_card == c and not self.animator.queue:
                         cy -= sc(20)
                     img = self._get_cached_texture(c.get_texture_path(), (self.card_w, self.card_h))
@@ -769,8 +833,8 @@ class FoolScene(BaseScene):
                     else:
                         current_img = emoji_img
 
-                    emoji_x = int(px - sc(250))
-                    emoji_y = int(self.engine.HEIGHT - sc(200)) if pid == self.engine.my_id else int(sc(100))
+                    emoji_x = int(px - sc(270))
+                    emoji_y = int(self.engine.HEIGHT - sc(320)) if pid == self.engine.my_id else int(sc(100))
                     img_rect = current_img.get_rect(center=(emoji_x, emoji_y))
                     window.blit(current_img, img_rect.topleft)
 
@@ -781,12 +845,12 @@ class FoolScene(BaseScene):
             draw_alpha_rect(window, (0, 0, 0, 160), (int(sc(20)), int(sc(20)), int(sc(350)), int(sc(50))), (218, 165, 32), int(sc(2)), int(sc(10)))
             draw_text_centered(window, f"{t('Money:')} {self.money[self.engine.my_id]}$", Assets.fonts['text30'], (255, 255, 255), (0, 0, 0), (int(sc(20)), int(sc(20)), int(sc(350)), int(sc(50))))
 
-            emoji_btn_rect = pygame.Rect(int(self.cx + sc(260)), int(self.engine.HEIGHT - sc(200)), self.emoji_btn_size, self.emoji_btn_size)
+            emoji_btn_rect = pygame.Rect(int(self.cx + sc(280)), int(self.engine.HEIGHT - sc(200)), self.emoji_btn_size, self.emoji_btn_size)
             draw_alpha_rect(window, (0, 0, 0, 160), emoji_btn_rect, (218, 165, 32), int(sc(2)), int(sc(10)))
             window.blit(Assets.images['logo_emoji'], emoji_btn_rect.topleft)
 
             if self.emoji_panel_open:
-                panel_rect = pygame.Rect(int(self.cx + sc(260)), int(self.engine.HEIGHT - sc(390)), int(sc(350)), int(sc(180)))
+                panel_rect = pygame.Rect(int(self.cx + sc(280)), int(self.engine.HEIGHT - sc(390)), int(sc(350)), int(sc(180)))
                 anim_progress = min(1.0, (current_time - self.emoji_panel_anim_start) / 250.0)
                 t_anim = 1 - (1 - anim_progress) ** 5
                 anim_h = int(panel_rect.height * t_anim)
@@ -828,6 +892,9 @@ class FoolScene(BaseScene):
                 if self.money[self.engine.my_id] >= 10000: self.set_bet_10000.draw()
 
                 if self.players[self.engine.my_id].get_bet().get_value() > 0:
+                    draw_text_centered(window, t("Right click to reset raise"), Assets.fonts['text30'], (200, 200, 200), (0, 0, 0),
+                                       (int(self.mountain_pos[0] + sc(90)), int(self.mountain_pos[1] - sc(160)), int(sc(300)), int(sc(30))))
+
                     h_en = self.enough_btn.collidepoint(mx, my)
                     b_col = (255, 215, 0) if h_en else (218, 165, 32)
                     draw_alpha_rect(window, (0, 0, 0, 160), self.enough_btn, b_col, int(sc(3)) if h_en else int(sc(2)), int(sc(15)))
@@ -925,14 +992,26 @@ class FoolScene(BaseScene):
                     if cid == self.engine.my_id:
                         self.engine.current_progress["money"] = self.money[self.engine.my_id]
                         save_progress(self.engine.current_progress)
-                    c_img = self._get_cached_texture(os.path.join("textures", "chips", f"{parsed_val}.png"), (self.cw, self.ch))
+                    theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
+                    c_img = self._get_cached_texture(os.path.join("textures", "chips", theme, f"{parsed_val}.png"), (self.cw, self.ch))
                     px = self.deck_pos[0] - sc(250)
-                    anim_start = (int(self.mountain_pos[0] + Assets.images['all_chips'].get_width() // 2), int(self.mountain_pos[1] + Assets.images['all_chips'].get_height() // 2))
+                    anim_start = (int(self.mountain_pos[0] + sc(100)), int(self.mountain_pos[1] + sc(80)))
                     total_val = sum(p.get_bet().get_value() for p in self.players.values())
                     count = sum(total_val // d for d in [10000, 2500, 1000, 500, 250, 100])
-                    anim_end = (int(px), int(self.deck_pos[1] + sc(30) - max(0, count - 1) * sc(8)))
+                    anim_end = (int(px - self.cw // 2), int(self.cy - self.ch // 2 - max(0, count - 1) * sc(8)))
                     self.animator.add(c_img, anim_start, anim_end, self.rebuild_placed_chips, 20)
                     self.engine.server.broadcast({"action": "bet", "id": cid, "val": parsed_val})
+            elif action == "cancel_bet" and self.game_phase == "betting":
+                current_bet = self.players[cid].get_bet().get_value()
+                if current_bet > 0 and cid not in self.ready_to_play:
+                    Assets.sounds['chip'].play()
+                    self.money[cid] += current_bet
+                    self.players[cid].get_bet().value = 0
+                    if cid == self.engine.my_id:
+                        self.engine.current_progress["money"] = self.money[self.engine.my_id]
+                        save_progress(self.engine.current_progress)
+                    self.rebuild_placed_chips()
+                    self.engine.server.broadcast({"action": "cancel_bet", "id": cid})
             elif action == "enough" and self.game_phase == "betting":
                 if self.players[cid].get_bet().get_value() > 0:
                     Assets.sounds['enter'].play()
@@ -984,13 +1063,24 @@ class FoolScene(BaseScene):
                 if cid == self.engine.my_id:
                     self.engine.current_progress["money"] = self.money[self.engine.my_id]
                     save_progress(self.engine.current_progress)
-                c_img = self._get_cached_texture(os.path.join("textures", "chips", f"{bet_val}.png"), (self.cw, self.ch))
+                theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
+                c_img = self._get_cached_texture(os.path.join("textures", "chips", theme, f"{bet_val}.png"), (self.cw, self.ch))
                 px = self.deck_pos[0] - sc(250)
-                anim_start = (int(self.mountain_pos[0] + Assets.images['all_chips'].get_width() // 2), int(self.mountain_pos[1] + Assets.images['all_chips'].get_height() // 2))
+                anim_start = (int(self.mountain_pos[0] + sc(100)), int(self.mountain_pos[1] + sc(80)))
                 total_val = sum(p.get_bet().get_value() for p in self.players.values())
                 count = sum(total_val // d for d in [10000, 2500, 1000, 500, 250, 100])
-                anim_end = (int(px), int(self.deck_pos[1] + sc(30) - max(0, count - 1) * sc(8)))
+                anim_end = (int(px - self.cw // 2), int(self.cy - self.ch // 2 - max(0, count - 1) * sc(8)))
                 self.animator.add(c_img, anim_start, anim_end, self.rebuild_placed_chips, 20)
+            elif action == "cancel_bet":
+                cid = msg["id"]
+                current_bet = self.players[cid].get_bet().get_value()
+                Assets.sounds['chip'].play()
+                self.money[cid] += current_bet
+                self.players[cid].get_bet().value = 0
+                if cid == self.engine.my_id:
+                    self.engine.current_progress["money"] = self.money[self.engine.my_id]
+                    save_progress(self.engine.current_progress)
+                self.rebuild_placed_chips()
             elif action == "ready":
                 self.ready_to_play.add(msg["id"])
             elif action == "sync":

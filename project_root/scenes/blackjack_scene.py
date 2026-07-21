@@ -48,7 +48,7 @@ class BlackjackScene(BaseScene):
         self.dealer = Player(True)
         self.deck = Deck()
 
-        self.card_w, self.card_h = sc(140), sc(190)
+        self.card_w, self.card_h = sc(190), sc(250)
         self.cx, self.cy = int(self.engine.WIDTH // 2), int(self.engine.HEIGHT // 2)
         self.deck_pos = (int(self.engine.WIDTH - sc(200)), int(self.cy - sc(100)))
 
@@ -57,7 +57,7 @@ class BlackjackScene(BaseScene):
     def _init_ui(self):
         self.get_btn_rect = pygame.Rect(int(sc(30)), int(self.engine.HEIGHT - sc(150)), int(sc(240)), int(sc(85)))
         self.pass_btn_rect = pygame.Rect(int(sc(270)), int(self.engine.HEIGHT - sc(150)), int(sc(240)), int(sc(85)))
-        self.restart_btn_rect = pygame.Rect(0, 0, int(sc(380)), int(sc(100))); self.restart_btn_rect.center = (self.cx, int(self.cy + sc(80)))
+        self.restart_btn_rect = pygame.Rect(0, 0, int(sc(380)), int(sc(100))); self.restart_btn_rect.center = (self.cx, int(self.cy + sc(50)))
         self.exit_game_btn = pygame.Rect(int(self.engine.WIDTH - sc(350)), int(self.engine.HEIGHT - sc(170)), int(sc(300)), int(sc(110)))
         self.enough_btn = pygame.Rect(0, 0, int(sc(350)), int(sc(125))); self.enough_btn.center = (self.cx, int(self.engine.HEIGHT - sc(200)))
 
@@ -71,12 +71,14 @@ class BlackjackScene(BaseScene):
             rad = math.radians(a)
             pos.append((int(mc_x + math.cos(rad) * rx - self.cw // 2), int(mc_y + math.sin(rad) * ry - self.ch // 2)))
 
-        self.set_bet_100 = Button(pos[0][0], pos[0][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_100.set_button_texture(os.path.join("textures", "chips", "100.png"))
-        self.set_bet_250 = Button(pos[1][0], pos[1][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_250.set_button_texture(os.path.join("textures", "chips", "250.png"))
-        self.set_bet_500 = Button(pos[2][0], pos[2][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_500.set_button_texture(os.path.join("textures", "chips", "500.png"))
-        self.set_bet_1000 = Button(pos[3][0], pos[3][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_1000.set_button_texture(os.path.join("textures", "chips", "1000.png"))
-        self.set_bet_2500 = Button(pos[4][0], pos[4][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_2500.set_button_texture(os.path.join("textures", "chips", "2500.png"))
-        self.set_bet_10000 = Button(pos[5][0], pos[5][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_10000.set_button_texture(os.path.join("textures", "chips", "10000.png"))
+        theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
+
+        self.set_bet_100 = Button(pos[0][0], pos[0][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_100.set_button_texture(os.path.join("textures", "chips", theme, "100.png"))
+        self.set_bet_250 = Button(pos[1][0], pos[1][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_250.set_button_texture(os.path.join("textures", "chips", theme, "250.png"))
+        self.set_bet_500 = Button(pos[2][0], pos[2][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_500.set_button_texture(os.path.join("textures", "chips", theme, "500.png"))
+        self.set_bet_1000 = Button(pos[3][0], pos[3][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_1000.set_button_texture(os.path.join("textures", "chips", theme, "1000.png"))
+        self.set_bet_2500 = Button(pos[4][0], pos[4][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_2500.set_button_texture(os.path.join("textures", "chips", theme, "2500.png"))
+        self.set_bet_10000 = Button(pos[5][0], pos[5][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_10000.set_button_texture(os.path.join("textures", "chips", theme, "10000.png"))
 
         self.emoji_btn_size = int(sc(80))
         self.emoji_panel_open = False
@@ -139,8 +141,30 @@ class BlackjackScene(BaseScene):
         return (255, 215, 0)
 
     def _get_cached_texture(self, path, size):
+        if self.engine.current_theme == "cyberpunk":
+            path = path.replace("cards_wood", "cards_cyberpunk")
+
         if path not in self.texture_cache:
-            self.texture_cache[path] = load_img(path, size)
+            if self.engine.current_theme == "cyberpunk":
+                raw_img = load_img(path)
+                img_w, img_h = raw_img.get_size()
+                target_w, target_h = size
+
+                ratio = max(target_w / img_w, target_h / img_h)
+                new_w = int(img_w * ratio)
+                new_h = int(img_h * ratio)
+
+                scaled_img = pygame.transform.smoothscale(raw_img, (new_w, new_h))
+                final_img = pygame.Surface(size, pygame.SRCALPHA)
+
+                offset_x = (target_w - new_w) // 2
+                offset_y = (target_h - new_h) // 2
+                final_img.blit(scaled_img, (offset_x, offset_y))
+
+                self.texture_cache[path] = final_img
+            else:
+                self.texture_cache[path] = load_img(path, size)
+
         return self.texture_cache[path]
 
     def _deal_animated(self, c, end_x, end_y, on_finish, img=None):
@@ -189,6 +213,23 @@ class BlackjackScene(BaseScene):
         emoji_btn_rect = pygame.Rect(int(px_my + sc(200)), int(self.engine.HEIGHT - sc(115)), self.emoji_btn_size, self.emoji_btn_size)
 
         for event in events:
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+                if self.game_phase == "betting" and self.engine.my_id not in self.ready_to_play:
+                    current_bet = self.players[self.engine.my_id].get_bet().get_value() if self.engine.my_id in self.players else 0
+                    if current_bet > 0:
+                        if self.mode == "multiplayer_client":
+                            if self.engine.client:
+                                self.engine.client.send_data({"action": "cancel_bet"})
+                        else:
+                            Assets.sounds['chip'].play()
+                            self.money[self.engine.my_id] += current_bet
+                            self.players[self.engine.my_id].get_bet().value = 0
+                            self.engine.current_progress["money"] = self.money[self.engine.my_id]
+                            save_progress(self.engine.current_progress)
+                            self.rebuild_placed_chips()
+                            if self.engine.server:
+                                self.engine.server.broadcast({"action": "cancel_bet", "id": self.engine.my_id})
+
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if self.animator.queue: return
 
@@ -320,8 +361,9 @@ class BlackjackScene(BaseScene):
                         rem %= d
 
             chips.reverse()
+            theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
             for i, c in enumerate(chips):
-                img = self._get_cached_texture(os.path.join("textures", "chips", f"{c}.png"), (self.cw, self.ch))
+                img = self._get_cached_texture(os.path.join("textures", "chips", theme, f"{c}.png"), (self.cw, self.ch))
                 self.placed_chips.append((img, (int(px - self.w_c // 2), int(self.cy - self.w_c // 2 - i * sc(8)))))
 
     def _handle_chip_click(self, mx, my):
@@ -345,12 +387,13 @@ class BlackjackScene(BaseScene):
                 self.money[self.engine.my_id] -= bet_val
                 self.engine.current_progress["money"] = self.money[self.engine.my_id]
                 save_progress(self.engine.current_progress)
-                c_img = self._get_cached_texture(os.path.join("textures", "chips", f"{bet_val}.png"), (self.cw, self.ch))
+                theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
+                c_img = self._get_cached_texture(os.path.join("textures", "chips", theme, f"{bet_val}.png"), (self.cw, self.ch))
                 px = self.get_player_center(self.engine.my_id)
-                anim_start = (int(self.mountain_pos[0] + Assets.images['all_chips'].get_width() // 2), int(self.mountain_pos[1] + Assets.images['all_chips'].get_height() // 2))
+                anim_start = (int(self.mountain_pos[0] + sc(100)), int(self.mountain_pos[1] + sc(80)))
                 temp_val = self.players[self.engine.my_id].get_bet().get_value()
                 count = sum(temp_val // d for d in [10000, 2500, 1000, 500, 250, 100])
-                anim_end = (int(px - self.w_c // 2), int(self.cy - self.w_c // 2 - max(0, count - 1) * sc(8)))
+                anim_end = (int(px - self.cw // 2), int(self.cy - self.ch // 2 - max(0, count - 1) * sc(8)))
                 self.animator.add(c_img, anim_start, anim_end, self.rebuild_placed_chips, 20)
                 if self.engine.server: self.engine.server.broadcast({"action": "bet", "id": self.engine.my_id, "val": bet_val})
 
@@ -373,7 +416,7 @@ class BlackjackScene(BaseScene):
             c_d1 = self.deck.erase(random.randint(0, len(self.deck) - 1))
             if self.engine.server: self.engine.server.broadcast({"action": "deal", "target": "dealer", "val": c_d1.value, "suit": c_d1.suit, "hidden": True})
             shirt = Assets.images.get(f"shirt_{self.engine.current_theme}", Assets.images['shirt_red'])
-            self._deal_animated(c_d1, int(self.cx - self.card_w // 2), int(sc(50)), lambda card=c_d1: [Assets.sounds['card'].play(), self.dealer.take_card(card)], img=shirt)
+            self._deal_animated(c_d1, int(self.cx - self.card_w // 2), int(sc(70)), lambda card=c_d1: [Assets.sounds['card'].play(), self.dealer.take_card(card)], img=shirt)
 
             for pid in sorted(list(self.players.keys())):
                 c = self.deck.erase(random.randint(0, len(self.deck) - 1))
@@ -414,7 +457,7 @@ class BlackjackScene(BaseScene):
                     c = self.deck.erase(random.randint(0, len(self.deck) - 1))
                     d_len = len(self.dealer.get_deck()) + 1
                     end_x = int(self.cx - (self.card_w + (d_len - 1) * sc(40)) // 2 + (d_len - 1) * sc(40))
-                    self._deal_animated(c, end_x, int(sc(50)), lambda card=c: [Assets.sounds['card'].play(), self.dealer.take_card(card)])
+                    self._deal_animated(c, end_x, int(sc(70)), lambda card=c: [Assets.sounds['card'].play(), self.dealer.take_card(card)])
                     if self.engine.server: self.engine.server.broadcast({"action": "deal", "target": "dealer", "val": c.value, "suit": c.suit, "hidden": False})
             else:
                 for pid, p in self.players.items():
@@ -472,14 +515,26 @@ class BlackjackScene(BaseScene):
                     if cid == self.engine.my_id:
                         self.engine.current_progress["money"] = self.money[self.engine.my_id]
                         save_progress(self.engine.current_progress)
-                    c_img = self._get_cached_texture(os.path.join("textures", "chips", f"{bet_val}.png"), (self.cw, self.ch))
+                    theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
+                    c_img = self._get_cached_texture(os.path.join("textures", "chips", theme, f"{bet_val}.png"), (self.cw, self.ch))
                     px = self.get_player_center(cid)
-                    anim_start = (int(self.mountain_pos[0] + Assets.images['all_chips'].get_width() // 2), int(self.mountain_pos[1] + Assets.images['all_chips'].get_height() // 2))
+                    anim_start = (int(self.mountain_pos[0] + sc(100)), int(self.mountain_pos[1] + sc(80)))
                     temp_val = self.players[cid].get_bet().get_value()
                     count = sum(temp_val // d for d in [10000, 2500, 1000, 500, 250, 100])
-                    anim_end = (int(px - self.w_c // 2), int(self.cy - self.w_c // 2 - max(0, count - 1) * sc(8)))
+                    anim_end = (int(px - self.cw // 2), int(self.cy - self.ch // 2 - max(0, count - 1) * sc(8)))
                     self.animator.add(c_img, anim_start, anim_end, self.rebuild_placed_chips, 20)
                     self.engine.server.broadcast({"action": "bet", "id": cid, "val": bet_val})
+            elif action == "cancel_bet" and self.game_phase == "betting":
+                current_bet = self.players[cid].get_bet().get_value()
+                if current_bet > 0 and cid not in self.ready_to_play:
+                    Assets.sounds['chip'].play()
+                    self.money[cid] += current_bet
+                    self.players[cid].get_bet().value = 0
+                    if cid == self.engine.my_id:
+                        self.engine.current_progress["money"] = self.money[self.engine.my_id]
+                        save_progress(self.engine.current_progress)
+                    self.rebuild_placed_chips()
+                    self.engine.server.broadcast({"action": "cancel_bet", "id": cid})
             elif action == "enough" and self.game_phase == "betting":
                 if self.players[cid].get_bet().get_value() > 0:
                     Assets.sounds['enter'].play()
@@ -541,13 +596,24 @@ class BlackjackScene(BaseScene):
                 if cid == self.engine.my_id:
                     self.engine.current_progress["money"] = self.money[self.engine.my_id]
                     save_progress(self.engine.current_progress)
-                c_img = self._get_cached_texture(os.path.join("textures", "chips", f"{bet_val}.png"), (self.cw, self.ch))
+                theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
+                c_img = self._get_cached_texture(os.path.join("textures", "chips", theme, f"{bet_val}.png"), (self.cw, self.ch))
                 px = self.get_player_center(cid)
-                anim_start = (int(self.mountain_pos[0] + Assets.images['all_chips'].get_width() // 2), int(self.mountain_pos[1] + Assets.images['all_chips'].get_height() // 2))
+                anim_start = (int(self.mountain_pos[0] + sc(100)), int(self.mountain_pos[1] + sc(80)))
                 temp_val = self.players[cid].get_bet().get_value()
                 count = sum(temp_val // d for d in [10000, 2500, 1000, 500, 250, 100])
-                anim_end = (int(px - self.w_c // 2), int(self.cy - self.w_c // 2 - max(0, count - 1) * sc(8)))
+                anim_end = (int(px - self.cw // 2), int(self.cy - self.ch // 2 - max(0, count - 1) * sc(8)))
                 self.animator.add(c_img, anim_start, anim_end, self.rebuild_placed_chips, 20)
+            elif action == "cancel_bet":
+                cid = msg_obj["id"]
+                current_bet = self.players[cid].get_bet().get_value()
+                Assets.sounds['chip'].play()
+                self.money[cid] += current_bet
+                self.players[cid].get_bet().value = 0
+                if cid == self.engine.my_id:
+                    self.engine.current_progress["money"] = self.money[self.engine.my_id]
+                    save_progress(self.engine.current_progress)
+                self.rebuild_placed_chips()
             elif action == "ready":
                 self.ready_to_play.add(msg_obj["id"])
             elif action == "deal":
@@ -562,7 +628,7 @@ class BlackjackScene(BaseScene):
                     shirt = Assets.images.get(f"shirt_{self.engine.current_theme}", Assets.images['shirt_red'])
                     img = shirt if hidden else None
                     if hidden: self.dealer_hidden = True
-                    self._deal_animated(c, end_x, int(sc(50)), lambda card=c: [Assets.sounds['card'].play(), self.dealer.take_card(card)], img=img)
+                    self._deal_animated(c, end_x, int(sc(70)), lambda card=c: [Assets.sounds['card'].play(), self.dealer.take_card(card)], img=img)
                 else:
                     p_len = len(self.players[target].get_deck()) + 1
                     px = self.get_player_center(target)
@@ -612,7 +678,7 @@ class BlackjackScene(BaseScene):
                     img = self._get_cached_texture(c.get_texture_path(), (self.card_w, self.card_h))
                     visuals = self.card_visuals.get(c, {"offset": (0, 0), "angle": 0})
                     target_x = int(start_x + i * sc(40)) + visuals["offset"][0]
-                    target_y = int(self.engine.HEIGHT - sc(250)) + visuals["offset"][1]
+                    target_y = int(self.engine.HEIGHT - sc(360)) + visuals["offset"][1]
 
                     if visuals["angle"] != 0:
                         img = pygame.transform.rotozoom(img, visuals["angle"], 1.0)
@@ -630,8 +696,8 @@ class BlackjackScene(BaseScene):
 
             p_val = p.check_value_in_hand()
             if p_len > 0:
-                draw_alpha_rect(window, (0, 0, 0, 160), (int(px - sc(40)), int(self.engine.HEIGHT - sc(310)), int(sc(80)), int(sc(40))), (218, 165, 32), int(sc(2)), int(sc(10)))
-                draw_text_centered(window, f"{p_val}", Assets.fonts['text30'], (255,255,255), (0,0,0), (int(px - sc(40)), int(self.engine.HEIGHT - sc(310)), int(sc(80)), int(sc(40))))
+                draw_alpha_rect(window, (0, 0, 0, 160), (int(px - sc(40)), int(self.engine.HEIGHT - sc(420)), int(sc(80)), int(sc(40))), (218, 165, 32), int(sc(2)), int(sc(10)))
+                draw_text_centered(window, f"{p_val}", Assets.fonts['text30'], (255,255,255), (0,0,0), (int(px - sc(40)), int(self.engine.HEIGHT - sc(420)), int(sc(80)), int(sc(40))))
 
             if pid in self.active_emojis:
                 emo_data = self.active_emojis[pid]
@@ -654,7 +720,7 @@ class BlackjackScene(BaseScene):
                         current_img = emoji_img
 
                     emoji_x = int(px - sc(250))
-                    emoji_y = int(self.engine.HEIGHT - sc(200))
+                    emoji_y = int(self.engine.HEIGHT - sc(300))
                     img_rect = current_img.get_rect(center=(emoji_x, emoji_y))
                     window.blit(current_img, img_rect.topleft)
 
@@ -699,7 +765,7 @@ class BlackjackScene(BaseScene):
             for i, c in enumerate(self.dealer.get_deck()):
                 visuals = self.card_visuals.get(c, {"offset": (0, 0), "angle": 0})
                 target_x = int(start_x + i * sc(40)) + visuals["offset"][0]
-                target_y = int(sc(50)) + visuals["offset"][1]
+                target_y = int(sc(70)) + visuals["offset"][1]
 
                 img = shirt if i == 0 and self.dealer_hidden else self._get_cached_texture(c.get_texture_path(), (self.card_w, self.card_h))
                 if visuals["angle"] != 0:
@@ -740,6 +806,9 @@ class BlackjackScene(BaseScene):
                     if self.money[self.engine.my_id] >= 10000: self.set_bet_10000.draw()
 
                     if self.players[self.engine.my_id].get_bet().get_value() > 0:
+                        draw_text_centered(window, t("Right click to reset raise"), Assets.fonts['text30'], (200, 200, 200), (0, 0, 0),
+                                           (int(self.mountain_pos[0] + sc(90)), int(self.mountain_pos[1] - sc(160)), int(sc(300)), int(sc(30))))
+
                         h_en = self.enough_btn.collidepoint(mx, my)
                         b_col = (255, 215, 0) if h_en else (218, 165, 32)
                         draw_alpha_rect(window, (0, 0, 0, 160), self.enough_btn, b_col, int(sc(3)) if h_en else int(sc(2)), int(sc(15)))
@@ -788,8 +857,8 @@ class BlackjackScene(BaseScene):
             res = self.results[self.engine.my_id]
             msg = "Blackjack!" if res == "blackjack" else ("You win!" if res == "win" else ("You lose!" if res == "lose" else "Push!"))
             w = int(sc(480)) if msg == "Blackjack!" else (int(sc(580)) if res == "win" else (int(sc(650)) if res == "lose" else int(sc(300))))
-            draw_alpha_rect(window, (0, 0, 0, 160), (int(self.cx - w//2), int(self.cy - sc(60)), w, int(sc(80))), (218, 165, 32), int(sc(2)), int(sc(15)))
-            draw_text_centered(window, t(msg), Assets.fonts['f60'], (255, 255, 255), (0, 0, 0), (int(self.cx - w // 2), int(self.cy - sc(60)), w, int(sc(80))), 0)
+            draw_alpha_rect(window, (0, 0, 0, 160), (int(self.cx - w//2), int(self.cy - sc(100)), w, int(sc(80))), (218, 165, 32), int(sc(2)), int(sc(15)))
+            draw_text_centered(window, t(msg), Assets.fonts['f60'], (255, 255, 255), (0, 0, 0), (int(self.cx - w // 2), int(self.cy - sc(100)), w, int(sc(80))), 0)
 
             if self.mode == "singleplayer" or self.engine.my_id not in self.ready_to_play:
                 hovered = self.restart_btn_rect.collidepoint(mx, my)

@@ -45,6 +45,13 @@ class GameEngine:
         self.current_emoji_pack = self.current_settings.get("emoji_pack", "Standard")
         Assets.load_emojis(self.current_emoji_pack)
 
+        self.current_skip_splash = self.current_settings.get("skip_splash", False)
+        if not self.current_skip_splash:
+            logo_img = Assets.images.get('logo', pygame.Surface((int(sc(300)), int(sc(300)))))
+            if not play_splash_screen(self.WINDOW, self.clock, self.current_vsync, logo_img):
+                pygame.quit()
+                sys.exit()
+
         self.current_emotion = "main"
         self.current_theme = self.current_settings.get("current_theme", "red")
         self.current_bg_index = self.current_settings.get("current_bg_index", 1)
@@ -56,7 +63,6 @@ class GameEngine:
         self.sfx_volume = self.current_settings.get("sfx_volume", 0.2)
         self.muting_sfx = self.current_settings.get("muting_sfx", False)
         self.brightness = self.current_settings.get("brightness", 1.0)
-        self.current_skip_splash = self.current_settings.get("skip_splash", False)
         self.nickname_text = self.current_settings.get("nickname", "Player")
 
         self.server = None
@@ -71,11 +77,13 @@ class GameEngine:
             "red": {"menu": ["red_menu1.mp3", "red_menu2.mp3", "red_menu3.mp3"], "game": ["red_game1.mp3", "red_game2.mp3"]},
             "green": {"menu": ["green_menu1.mp3", "green_menu2.mp3", "green_menu3.mp3"], "game": ["green_game1.mp3", "green_game2.mp3"]},
             "blue": {"menu": ["blue_menu1.mp3", "blue_menu2.mp3", "blue_menu3.mp3"], "game": ["blue_game1.mp3", "blue_game2.mp3"]},
-            "gold": {"menu": ["gold_menu1.mp3", "gold_menu2.mp3", "gold_menu3.mp3", "gold_menu4.mp3"], "game": ["gold_game1.mp3", "gold_game2.mp3"]}
+            "gold": {"menu": ["gold_menu1.mp3", "gold_menu2.mp3", "gold_menu3.mp3", "gold_menu4.mp3"], "game": ["gold_game1.mp3", "gold_game2.mp3"]},
+            "cyberpunk": {"menu": ["cyberpunk_menu1.mp3", "cyberpunk_menu2.mp3", "cyberpunk_menu3.mp3"], "game": ["cyberpunk_game1.mp3", "cyberpunk_game2.mp3"]}
         }
 
         self.update_sfx_volume()
         self.set_theme_and_bg(self.current_theme, self.current_bg_index)
+
         self.play_track()
 
         self.scenes = {
@@ -98,6 +106,8 @@ class GameEngine:
             self.current_emotion = random.choice(["main", "arrogance", "idea"])
         elif self.current_companion == "gold":
             self.current_emotion = random.choice(["main", "arrogance", "kiss", "think", "wink"])
+        elif self.current_companion == "cyberpunk":
+            self.current_emotion = random.choice(["main", "kiss", "think", "wink", "happy"])
         else:
             self.current_emotion = random.choice(["main", "arrogance", "kiss", "wink"])
 
@@ -137,6 +147,9 @@ class GameEngine:
         self.current_bg_index = bg_idx
         self.pick_random_emotion()
 
+        Config.chip_theme = "cyberpunk" if self.current_theme == "cyberpunk" else "default"
+        Assets.images['all_chips'] = Assets.images.get(f'all_chips_{Config.chip_theme}', Assets.images.get('all_chips_default'))
+
         if self.current_theme == "green":
             self.current_cursor = Assets.images['c2']
             self.cursor_offset = (self.current_cursor.get_width() // 2, self.current_cursor.get_height() // 2)
@@ -152,6 +165,11 @@ class GameEngine:
             self.cursor_offset = (self.current_cursor.get_width() // 5, self.current_cursor.get_height() // 5)
             self.current_bg = Assets.images.get(f'bg_gold{self.current_bg_index}')
             self.thumb_color = (255, 215, 0)
+        elif self.current_theme == "cyberpunk":
+            self.current_cursor = Assets.images.get('c_cyberpunk', Assets.images.get('c1'))
+            self.cursor_offset = (self.current_cursor.get_width() // 5, self.current_cursor.get_height() // 5)
+            self.current_bg = Assets.images.get(f'bg_cyberpunk{self.current_bg_index}')
+            self.thumb_color = (0, 255, 255)
         else:
             self.current_cursor = Assets.images['c1']
             self.cursor_offset = (self.current_cursor.get_width() // 5, self.current_cursor.get_height() // 5)
@@ -163,17 +181,6 @@ class GameEngine:
         save_settings(self.current_settings)
 
     def run(self):
-        if not self.current_skip_splash:
-            pygame.mixer.pause()
-            pygame.mixer.music.pause()
-            logo_img = Assets.images.get('logo', pygame.Surface((int(sc(300)), int(sc(300)))))
-            if not play_splash_screen(self.WINDOW, self.clock, self.current_vsync, logo_img):
-                pygame.quit()
-                sys.exit()
-            pygame.mixer.unpause()
-            if not self.muting_music:
-                pygame.mixer.music.unpause()
-
         while self.running:
             self.mx, self.my = pygame.mouse.get_pos()
             events = pygame.event.get()

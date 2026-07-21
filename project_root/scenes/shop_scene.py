@@ -54,9 +54,9 @@ class ShopScene(BaseScene):
                     os.makedirs("configs")
                 with open(path, "w", encoding="utf-8") as f:
                     yaml.dump({
-                        "skins": [{"name": "Lei", "price": 10000}, {"name": "Cyberpunk", "price": 60000}, {"name": "Golden", "price": 60000}],
+                        "skins": [{"name": "Lei", "price": 20000}, {"name": "Cyberpunk", "price": 200000}, {"name": "Golden", "price": 150000}],
                         "titles": [{"name": "Volcano of Luck", "price": 30000}, {"name": "High roller", "price": 50000}, {"name": "Bluff master", "price": 50000}, {"name": "Millionaire", "price": 1000000}],
-                        "emoticons": [{"name": "Skull", "price": 40000}, {"name": "Cyberpunk", "price": 40000}, {"name": "Raccoon", "price": 40000}]
+                        "emoticons": [{"name": "Skull", "price": 50000}, {"name": "Cyberpunk", "price": 50000}, {"name": "Raccoon", "price": 50000}]
                     }, f)
             with open(path, "r", encoding="utf-8") as f:
                 self.store_data = yaml.safe_load(f)
@@ -70,7 +70,7 @@ class ShopScene(BaseScene):
                     yaml.dump(self.store_data, f)
 
         except Exception as e:
-            print(e)
+            pass
 
     def on_enter(self, **kwargs):
         self.engine.switch_music(self.engine.current_theme, "menu")
@@ -301,33 +301,49 @@ class ShopScene(BaseScene):
 
             skin_name = self.selected_item.get('name') if self.selected_category == "skins & themes" else ""
 
-            if skin_name == "Golden":
+            if skin_name in ["Golden", "Cyberpunk"]:
                 popup_surf = pygame.Surface((self.popup_rect.width, self.popup_rect.height), pygame.SRCALPHA)
 
                 r_radius = int(sc(20))
                 pygame.draw.rect(popup_surf, (255, 255, 255, 255), (0, 0, self.popup_rect.width, self.popup_rect.height), border_radius=r_radius)
 
-                gold_img = Assets.images.get('gold_preview')
-                if gold_img:
-                    ow, oh = gold_img.get_width(), gold_img.get_height()
+                img_key = 'gold_preview' if skin_name == "Golden" else 'cyberpunk_preview'
+                theme_img = Assets.images.get(img_key)
+
+                if theme_img:
+                    ow, oh = theme_img.get_width(), theme_img.get_height()
                     scale = max(self.popup_rect.width / ow, self.popup_rect.height / oh)
                     nw, nh = int(ow * scale), int(oh * scale)
-                    gold_scaled = pygame.transform.smoothscale(gold_img, (nw, nh))
+                    theme_scaled = pygame.transform.smoothscale(theme_img, (nw, nh))
 
                     crop_x = (nw - self.popup_rect.width) // 2
                     crop_y = (nh - self.popup_rect.height) // 2
 
-                    popup_surf.blit(gold_scaled, (0, 0), pygame.Rect(crop_x, crop_y, self.popup_rect.width, self.popup_rect.height), special_flags=pygame.BLEND_RGBA_MIN)
+                    popup_surf.blit(theme_scaled, (0, 0), pygame.Rect(crop_x, crop_y, self.popup_rect.width, self.popup_rect.height), special_flags=pygame.BLEND_RGBA_MIN)
 
                 window.blit(popup_surf, self.popup_rect.topleft)
 
-                description_lines = [
-                    t("• New outfit for Musa"),
-                    t("• New card shirt"),
-                    t("• New backgrounds"),
-                    t("• New music"),
-                    t("• New cursor")
-                ]
+
+                if skin_name == "Golden":
+                    description_lines = [
+                        t("• New outfit for Musa"),
+                        t("• New card shirt"),
+                        t("• New backgrounds"),
+                        t("• New music"),
+                        t("• New cursor"),
+                        t("• New logos")
+                    ]
+                elif skin_name == "Cyberpunk":
+                    description_lines = [
+                        t("• New outfit for Lei"),
+                        t("• New shirt & deck"),
+                        t("• New backgrounds"),
+                        t("• New music"),
+                        t("• New cursor"),
+                        t("• New logos")
+                    ]
+                else:
+                    description_lines = []
 
                 start_x = self.popup_rect.left + int(sc(50))
                 start_y = self.popup_rect.top + int(sc(140))
@@ -342,8 +358,9 @@ class ShopScene(BaseScene):
             else:
                 pygame.draw.rect(window, (30, 30, 30), self.popup_rect, border_radius=int(sc(20)))
 
-            draw_alpha_rect(window, (0, 0, 0, 0), self.popup_rect, (200, 200, 200), int(sc(3)), int(sc(20)))
-            draw_text_centered(window, t("Preview"), Assets.fonts['f60'], (255, 255, 255), (0, 0, 0), (self.cx, self.popup_rect.top + int(sc(60)), 0, 0), int(sc(3)))
+            if skin_name not in ["Golden", "Cyberpunk"]:
+                draw_alpha_rect(window, (0, 0, 0, 0), self.popup_rect, (200, 200, 200), int(sc(3)), int(sc(20)))
+                draw_text_centered(window, t("Preview"), Assets.fonts['f60'], (255, 255, 255), (0, 0, 0), (self.cx, self.popup_rect.top + int(sc(60)), 0, 0), int(sc(3)))
 
             is_bought = False
 
@@ -401,7 +418,7 @@ class ShopScene(BaseScene):
                 btn_color = (100, 100, 100)
                 btn_txt = "Bought"
             else:
-                shadow_offset = int(sc(3)) if skin_name == "Golden" else int(sc(2))
+                shadow_offset = int(sc(3)) if skin_name in ["Golden", "Cyberpunk"] else int(sc(2))
                 draw_text_centered(window, f"{price} $", Assets.fonts['text50'], (255, 215, 0), (0, 0, 0), (self.cx, self.cy + int(sc(90)), 0, 0), shadow_offset)
                 if can_afford:
                     btn_color = (50, 150, 50)

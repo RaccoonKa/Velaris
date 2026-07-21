@@ -1,10 +1,10 @@
 skins:
   - name: "Lei"
-    price: 10000
+    price: 20000
   - name: "Cyberpunk"
-    price: 60000
+    price: 200000
   - name: "Golden"
-    price: 60000
+    price: 150000
 
 titles:
   - name: "Volcano of Luck"
@@ -18,8 +18,8 @@ titles:
 
 emoticons:
   - name: "Skull"
-    price: 40000
+    price: 50000
   - name: "Cyberpunk"
-    price: 40000
+    price: 50000
   - name: "Raccoon"
-    price: 40000
+    price: 50000

@@ -4,7 +4,7 @@ import os
 import math
 
 from scenes.base_scene import BaseScene
-from core.models import Player, Deck
+from core.models import Player, Deck, Card
 from ui.ui import Button
 from ui.animations import Animator
 from utils.utils import sc, load_img, draw_alpha_rect, draw_text_centered
@@ -142,12 +142,14 @@ class PokerScene(BaseScene):
             rad = math.radians(a)
             pos.append((int(mc_x + math.cos(rad) * rx - self.cw // 2), int(mc_y + math.sin(rad) * ry - self.ch // 2)))
 
-        self.set_bet_100 = Button(pos[0][0], pos[0][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_100.set_button_texture(os.path.join("textures", "chips", "100.png"))
-        self.set_bet_250 = Button(pos[1][0], pos[1][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_250.set_button_texture(os.path.join("textures", "chips", "250.png"))
-        self.set_bet_500 = Button(pos[2][0], pos[2][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_500.set_button_texture(os.path.join("textures", "chips", "500.png"))
-        self.set_bet_1000 = Button(pos[3][0], pos[3][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_1000.set_button_texture(os.path.join("textures", "chips", "1000.png"))
-        self.set_bet_2500 = Button(pos[4][0], pos[4][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_2500.set_button_texture(os.path.join("textures", "chips", "2500.png"))
-        self.set_bet_10000 = Button(pos[5][0], pos[5][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_10000.set_button_texture(os.path.join("textures", "chips", "10000.png"))
+        theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
+
+        self.set_bet_100 = Button(pos[0][0], pos[0][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_100.set_button_texture(os.path.join("textures", "chips", theme, "100.png"))
+        self.set_bet_250 = Button(pos[1][0], pos[1][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_250.set_button_texture(os.path.join("textures", "chips", theme, "250.png"))
+        self.set_bet_500 = Button(pos[2][0], pos[2][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_500.set_button_texture(os.path.join("textures", "chips", theme, "500.png"))
+        self.set_bet_1000 = Button(pos[3][0], pos[3][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_1000.set_button_texture(os.path.join("textures", "chips", theme, "1000.png"))
+        self.set_bet_2500 = Button(pos[4][0], pos[4][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_2500.set_button_texture(os.path.join("textures", "chips", theme, "2500.png"))
+        self.set_bet_10000 = Button(pos[5][0], pos[5][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_10000.set_button_texture(os.path.join("textures", "chips", theme, "10000.png"))
 
     def _show_emoji(self, pid, idx):
         self.active_emojis[pid] = {
@@ -156,30 +158,67 @@ class PokerScene(BaseScene):
             "start_time": pygame.time.get_ticks()
         }
 
+    def init_player(self, pid):
+        self.players[pid] = Player(False)
+        if pid not in self.money:
+            self.money[pid] = self.engine.current_progress.get("money", 10000)
+
     def on_enter(self, mode="singleplayer"):
         self.mode = mode
         self.engine.switch_music(self.engine.current_theme, "game")
 
+        theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
+        self.set_bet_100.set_button_texture(os.path.join("textures", "chips", theme, "100.png"))
+        self.set_bet_250.set_button_texture(os.path.join("textures", "chips", theme, "250.png"))
+        self.set_bet_500.set_button_texture(os.path.join("textures", "chips", theme, "500.png"))
+        self.set_bet_1000.set_button_texture(os.path.join("textures", "chips", theme, "1000.png"))
+        self.set_bet_2500.set_button_texture(os.path.join("textures", "chips", theme, "2500.png"))
+        self.set_bet_10000.set_button_texture(os.path.join("textures", "chips", theme, "10000.png"))
+
         self.players.clear()
         self.money.clear()
 
-        self.engine.my_id = 0
-        self.players[0] = Player(False)
-        self.money[0] = self.engine.current_progress.get("money", 10000)
-        self.player_titles[0] = self.engine.current_progress.get("current_title", "Новичок")
+        if self.mode in ["singleplayer", "multiplayer_host"]:
+            self.engine.my_id = 0
+            self.init_player(0)
+            self.player_titles[0] = self.engine.current_progress.get("current_title", "Новичок")
 
-        if self.mode == "singleplayer":
-            for i in range(1, 4):
-                self.players[i] = Player(False)
-                self.money[i] = random.randint(5000, 20000)
-                self.player_titles[i] = "Шулер"
-            self.start_hand()
-        else:
-            self.game_phase = "waiting"
+            if self.mode == "singleplayer":
+                for i in range(1, 4):
+                    self.players[i] = Player(False)
+                    self.money[i] = random.randint(5000, 20000)
+                    self.player_titles[i] = "Шулер"
+                self.start_hand()
+            else:
+                self.game_phase = "waiting"
 
     def _get_cached_texture(self, path, size):
+        if self.engine.current_theme == "cyberpunk":
+            path = path.replace("cards_wood", "cards_cyberpunk")
+            if "cards_cyberpunk" in path or "cybershirt" in path:
+                size = (sc(180), sc(215))
+
         if path not in self.texture_cache:
-            self.texture_cache[path] = load_img(path, size)
+            if self.engine.current_theme == "cyberpunk":
+                raw_img = load_img(path)
+                img_w, img_h = raw_img.get_size()
+                target_w, target_h = size
+
+                ratio = max(target_w / img_w, target_h / img_h)
+                new_w = int(img_w * ratio)
+                new_h = int(img_h * ratio)
+
+                scaled_img = pygame.transform.smoothscale(raw_img, (new_w, new_h))
+                final_img = pygame.Surface(size, pygame.SRCALPHA)
+
+                offset_x = (target_w - new_w) // 2
+                offset_y = (target_h - new_h) // 2
+                final_img.blit(scaled_img, (offset_x, offset_y))
+
+                self.texture_cache[path] = final_img
+            else:
+                self.texture_cache[path] = load_img(path, size)
+
         return self.texture_cache[path]
 
     def reset_game_state(self):
@@ -218,6 +257,9 @@ class PokerScene(BaseScene):
 
     def start_hand(self):
         self.reset_game_state()
+        if hasattr(self.engine, 'server') and self.engine.server:
+            self.engine.server.broadcast({"action": "start_hand"})
+
         self.deck.refill_random(52)
 
         self.dealer_idx = (self.dealer_idx + 1) % len(self.players)
@@ -240,12 +282,17 @@ class PokerScene(BaseScene):
         self.current_turn_idx = bb_idx
         self.game_phase = "dealing"
 
+        self._sync_state()
+
         for _ in range(2):
             for pid in self.active_players:
                 c = self.deck.erase(-1)
                 self._deal_to_player(c, pid)
 
     def _deal_to_player(self, card, pid):
+        if hasattr(self.engine, 'server') and self.engine.server:
+            self.engine.server.broadcast({"action": "deal_player", "target": pid, "val": card.value, "suit": card.suit})
+
         px, py = self._get_player_pos(pid)
         p_len = len(self.players[pid].get_deck())
 
@@ -268,22 +315,41 @@ class PokerScene(BaseScene):
     def _deal_community(self, count):
         for _ in range(count):
             c = self.deck.erase(-1)
-            idx = len(self.community_cards)
+            if hasattr(self.engine, 'server') and self.engine.server:
+                self.engine.server.broadcast({"action": "deal_community", "val": c.value, "suit": c.suit})
+            self._deal_community_anim(c)
 
-            offset_x = random.randint(int(sc(-5)), int(sc(5)))
-            offset_y = random.randint(int(sc(-5)), int(sc(5)))
-            angle = random.randint(-5, 5)
-            self.card_visuals[c] = {"offset": (offset_x, offset_y), "angle": angle}
+    def _deal_community_anim(self, c):
+        idx = len(self.community_cards)
+        offset_x = random.randint(int(sc(-5)), int(sc(5)))
+        offset_y = random.randint(int(sc(-5)), int(sc(5)))
+        angle = random.randint(-5, 5)
+        self.card_visuals[c] = {"offset": (offset_x, offset_y), "angle": angle}
 
-            total_w = 5 * sc(145)
-            start_x = self.cx - total_w // 2
+        total_w = 5 * sc(145)
+        start_x = self.cx - total_w // 2
 
-            end_x = int(start_x + idx * sc(145)) + offset_x
-            end_y = self.cy - sc(80) + offset_y
+        end_x = int(start_x + idx * sc(145)) + offset_x
+        end_y = self.cy - sc(80) + offset_y
 
-            self.animator.add(self._get_cached_texture(c.get_texture_path(), (self.card_w, self.card_h)),
-                              self.deck_pos, (end_x, end_y),
-                              lambda c=c: [Assets.sounds['card'].play(), self.community_cards.append(c)], 15, end_angle=angle)
+        self.animator.add(self._get_cached_texture(c.get_texture_path(), (self.card_w, self.card_h)),
+                          self.deck_pos, (end_x, end_y),
+                          lambda card=c: [Assets.sounds['card'].play(), self.community_cards.append(card)], 15, end_angle=angle)
+
+    def _sync_state(self):
+        if hasattr(self.engine, 'server') and self.engine.server:
+            data = {
+                "action": "sync",
+                "pot": self.pot,
+                "current_bet": self.current_bet,
+                "round_bets": {k: v for k, v in self.round_bets.items()},
+                "money": {k: v for k, v in self.money.items()},
+                "active_players": list(self.active_players),
+                "current_turn_idx": self.current_turn_idx,
+                "game_phase": self.game_phase,
+                "dealer_idx": self.dealer_idx
+            }
+            self.engine.server.broadcast(data)
 
     def _place_bet(self, pid, amount):
         real_amount = min(amount, self.money[pid])
@@ -336,6 +402,7 @@ class PokerScene(BaseScene):
                 return
 
         self.bot_timer = 0
+        self._sync_state()
 
     def _next_phase(self):
         for pid, bet in self.round_bets.items():
@@ -363,6 +430,7 @@ class PokerScene(BaseScene):
             return
 
         self.current_turn_idx = self.dealer_idx
+        self._sync_state()
 
     def _showdown(self):
         self.game_phase = "showdown"
@@ -405,8 +473,22 @@ class PokerScene(BaseScene):
             self.engine.current_progress["money"] = self.money[self.engine.my_id]
             save_progress(self.engine.current_progress)
 
+        if hasattr(self.engine, 'server') and self.engine.server:
+            self.engine.server.broadcast({
+                "action": "showdown_results",
+                "winners": self.last_winners,
+                "money": {k: v for k, v in self.money.items()}
+            })
+
     def update(self):
         self.animator.update()
+
+        if self.mode == "multiplayer_host" and getattr(self.engine, 'server', None):
+            self._handle_server()
+            if self.game_phase == "waiting" and len(self.players) == getattr(self.engine, 'target_players', 2):
+                self.start_hand()
+        elif self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
+            self._handle_client()
 
         if self.game_phase == "dealing" and not self.animator.queue:
             self.game_phase = "preflop"
@@ -458,12 +540,98 @@ class PokerScene(BaseScene):
         self._place_bet(bot_id, bet_amount)
         self._next_turn()
 
+    def _handle_server(self):
+        while not self.engine.server.message_queue.empty():
+            msg_obj = self.engine.server.message_queue.get()
+            data = msg_obj["data"]
+            action = data.get("action")
+            cid = data.get("client_id")
+
+            pids = list(self.players.keys())
+
+            if action == "set_title":
+                t_val = data.get("title", "Новичок")
+                self.player_titles[cid] = t_val
+                self.engine.server.broadcast({"action": "set_title", "id": cid, "title": t_val})
+            elif action == "emoji":
+                idx = data.get("idx")
+                self._show_emoji(cid, idx)
+                self.engine.server.broadcast({"action": "emoji", "id": cid, "idx": idx})
+            elif action == "fold" and pids[self.current_turn_idx] == cid:
+                if cid in self.active_players:
+                    self.active_players.remove(cid)
+                self._next_turn()
+            elif action == "call" and pids[self.current_turn_idx] == cid:
+                to_call = self.current_bet - self.round_bets.get(cid, 0)
+                self._place_bet(cid, to_call)
+                self._next_turn()
+            elif action == "raise" and pids[self.current_turn_idx] == cid:
+                amt = data.get("amount", 0)
+                self._place_bet(cid, amt)
+                self._next_turn()
+            elif action == "restart" and self.game_phase == "showdown":
+                self.start_hand()
+
+    def _handle_client(self):
+        while not self.engine.client.message_queue.empty():
+            msg_obj = self.engine.client.message_queue.get()
+            action = msg_obj.get("action")
+
+            if action == "init":
+                self.engine.my_id = msg_obj["id"]
+                self.engine.target_players = msg_obj.get("target_players", 2)
+                self.players.clear()
+                self.money.clear()
+                for pid in msg_obj["players"]: self.init_player(pid)
+                self.init_player(self.engine.my_id)
+                self.engine.client.send_data({"action": "set_title", "title": self.engine.current_progress.get("current_title", "Новичок")})
+            elif action == "set_title":
+                self.player_titles[msg_obj["id"]] = msg_obj["title"]
+            elif action == "player_joined":
+                self.init_player(msg_obj["id"])
+            elif action == "player_left":
+                self.players.pop(msg_obj["id"], None)
+                self.money.pop(msg_obj["id"], None)
+                if msg_obj["id"] in self.active_players:
+                    self.active_players.remove(msg_obj["id"])
+            elif action == "deal_player":
+                target = msg_obj["target"]
+                c = Card(msg_obj["val"], msg_obj["suit"])
+                self._deal_to_player(c, target)
+            elif action == "deal_community":
+                c = Card(msg_obj["val"], msg_obj["suit"])
+                self._deal_community_anim(c)
+            elif action == "sync":
+                self.pot = msg_obj["pot"]
+                self.current_bet = msg_obj["current_bet"]
+                self.round_bets = {int(k): v for k, v in msg_obj["round_bets"].items()}
+                self.money = {int(k): v for k, v in msg_obj["money"].items()}
+                self.active_players = set(msg_obj["active_players"])
+                self.current_turn_idx = msg_obj["current_turn_idx"]
+                self.game_phase = msg_obj["game_phase"]
+                self.dealer_idx = msg_obj["dealer_idx"]
+                self.rebuild_placed_chips()
+            elif action == "showdown_results":
+                self.last_winners = msg_obj["winners"]
+                self.money = {int(k): v for k, v in msg_obj["money"].items()}
+                self.game_phase = "showdown"
+            elif action == "emoji":
+                self._show_emoji(msg_obj["id"], msg_obj["idx"])
+            elif action == "start_hand":
+                self.reset_game_state()
+
     def handle_events(self, events):
         mx, my = self.engine.mx, self.engine.my
         px_my, py_my = self._get_player_pos(self.engine.my_id)
         info_y_my = py_my + self.card_h + sc(10)
 
         emoji_btn_rect = pygame.Rect(int(px_my - sc(150) - self.emoji_btn_size - sc(15)), int(info_y_my + sc(20)), self.emoji_btn_size, self.emoji_btn_size)
+
+        panel_w, panel_h = int(sc(350)), int(sc(180))
+        btn_y = int(self.engine.HEIGHT - sc(120))
+        panel_x = int(self.engine.WIDTH - sc(400) - panel_w // 2)
+        panel_y = int(btn_y - panel_h - sc(20))
+        panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
 
         for event in events:
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
@@ -474,7 +642,6 @@ class PokerScene(BaseScene):
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if self.emoji_panel_open:
-                    panel_rect = pygame.Rect(int(px_my - sc(150) - sc(350) - sc(20)), int(info_y_my - sc(200)), int(sc(350)), int(sc(180)))
                     if panel_rect.collidepoint(mx, my):
                         rel_x = mx - panel_rect.x - sc(15)
                         rel_y = my - panel_rect.y - sc(15)
@@ -483,9 +650,9 @@ class PokerScene(BaseScene):
                         if 0 <= col < 4 and 0 <= row < 2:
                             idx = row * 4 + col
                             self._show_emoji(self.engine.my_id, idx)
-                            if self.mode == "multiplayer_client" and self.engine.client:
+                            if self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
                                 self.engine.client.send_data({"action": "emoji", "idx": idx})
-                            elif hasattr(self.engine, 'server') and self.engine.server:
+                            elif hasattr(self.engine, 'server') and getattr(self.engine, 'server', None):
                                 self.engine.server.broadcast({"action": "emoji", "id": self.engine.my_id, "idx": idx})
                         return
                     else:
@@ -509,7 +676,10 @@ class PokerScene(BaseScene):
                 if self.game_phase == "showdown":
                     if self.restart_btn.collidepoint(mx, my):
                         Assets.sounds['enter'].play()
-                        self.start_hand()
+                        if self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
+                            self.engine.client.send_data({"action": "restart"})
+                        else:
+                            self.start_hand()
                     return
 
                 if self._is_my_turn() and not self.animator.queue and self.game_phase in ["preflop", "flop", "turn", "river"]:
@@ -518,21 +688,31 @@ class PokerScene(BaseScene):
 
                     if self.fold_btn.collidepoint(mx, my):
                         Assets.sounds['enter'].play()
-                        if self.engine.my_id in self.active_players:
-                            self.active_players.remove(self.engine.my_id)
-                        self._next_turn()
+                        if self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
+                            self.engine.client.send_data({"action": "fold"})
+                        else:
+                            if self.engine.my_id in self.active_players:
+                                self.active_players.remove(self.engine.my_id)
+                            self._next_turn()
 
                     elif self.call_btn.collidepoint(mx, my):
                         Assets.sounds['enter'].play()
-                        self._place_bet(self.engine.my_id, to_call)
-                        self._next_turn()
+                        if self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
+                            self.engine.client.send_data({"action": "call"})
+                        else:
+                            self._place_bet(self.engine.my_id, to_call)
+                            self._next_turn()
 
                     elif self.raise_btn.collidepoint(mx, my) and can_raise:
                         Assets.sounds['enter'].play()
                         total_bet = to_call + self.staged_raise
-                        self._place_bet(self.engine.my_id, total_bet)
-                        self.staged_raise = 0
-                        self._next_turn()
+                        if self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
+                            self.engine.client.send_data({"action": "raise", "amount": total_bet})
+                            self.staged_raise = 0
+                        else:
+                            self._place_bet(self.engine.my_id, total_bet)
+                            self.staged_raise = 0
+                            self._next_turn()
 
                     bet_val = 0
                     if self.set_bet_10000.rect.collidepoint(mx, my): bet_val = 10000
@@ -546,9 +726,10 @@ class PokerScene(BaseScene):
                         if self.staged_raise + bet_val <= 100000:
                             Assets.sounds['chip'].play()
                             self.staged_raise += bet_val
-                            c_img = self._get_cached_texture(os.path.join("textures", "chips", f"{bet_val}.png"), (self.cw, self.ch))
+                            theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
+                            c_img = self._get_cached_texture(os.path.join("textures", "chips", theme, f"{bet_val}.png"), (self.cw, self.ch))
                             px, py = self._get_player_pos(self.engine.my_id)
-                            anim_start = (int(self.mountain_pos[0] + Assets.images['all_chips'].get_width() // 2), int(self.mountain_pos[1] + Assets.images['all_chips'].get_height() // 2))
+                            anim_start = (int(self.mountain_pos[0] + sc(100)), int(self.mountain_pos[1] + sc(80)))
                             temp_val = self.round_bets.get(self.engine.my_id, 0) + self.staged_raise
                             count = sum(temp_val // d for d in [10000, 2500, 1000, 500, 250, 100])
                             anim_end = (int(px - sc(220)), int(py + sc(80) - max(0, count - 1) * sc(8)))
@@ -560,11 +741,11 @@ class PokerScene(BaseScene):
             return (self.cx, int(self.engine.HEIGHT - sc(330)))
 
         other_ids = [p for p in self.players if p != self.engine.my_id]
-        if not other_ids: return (self.cx, sc(100))
+        if not other_ids: return (self.cx, int(sc(150)))
 
         idx = other_ids.index(pid)
         spacing = self.engine.WIDTH // (len(other_ids) + 1)
-        return (spacing * (idx + 1), int(sc(100)))
+        return (spacing * (idx + 1), int(sc(150)))
 
     def rebuild_placed_chips(self):
         self.placed_chips.clear()
@@ -605,8 +786,9 @@ class PokerScene(BaseScene):
                         rem %= d
 
             chips.reverse()
+            theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
             for i, c in enumerate(chips):
-                img = self._get_cached_texture(os.path.join("textures", "chips", f"{c}.png"), (self.cw, self.ch))
+                img = self._get_cached_texture(os.path.join("textures", "chips", theme, f"{c}.png"), (self.cw, self.ch))
 
                 if pid == self.engine.my_id:
                     chip_x = int(px - sc(220))
@@ -648,7 +830,7 @@ class PokerScene(BaseScene):
                     window.blit(img, (x, y))
 
         pot_rect = pygame.Rect(0, 0, int(sc(300)), int(sc(60)))
-        pot_rect.center = (self.cx, self.cy - sc(180))
+        pot_rect.center = (self.cx, self.cy - sc(130))
         draw_alpha_rect(window, (0, 0, 0, 160), pot_rect, (218, 165, 32), int(sc(2)), int(sc(15)))
         draw_text_centered(window, f"{t('Pot:')} {self.pot}$", Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), pot_rect)
 
@@ -682,7 +864,7 @@ class PokerScene(BaseScene):
             else:
                 box_color = (218, 165, 32)
 
-            info_y = py + self.card_h + sc(10) if pid == self.engine.my_id else py - sc(90)
+            info_y = py + self.card_h + sc(10) if pid == self.engine.my_id else py - sc(140)
 
             draw_alpha_rect(window, (0, 0, 0, 160), (int(px - sc(150)), int(info_y), int(sc(300)), int(sc(120))), box_color, int(sc(2)), int(sc(10)))
 
@@ -719,10 +901,10 @@ class PokerScene(BaseScene):
 
                     if pid == self.engine.my_id:
                         emoji_x = int(px - sc(260))
-                        emoji_y = int(info_y - sc(20))
+                        emoji_y = int(info_y - sc(60))
                     else:
                         emoji_x = int(px + sc(120))
-                        emoji_y = int(info_y + sc(40))
+                        emoji_y = int(info_y)
 
                     img_rect = current_img.get_rect(center=(emoji_x, emoji_y))
                     window.blit(current_img, img_rect.topleft)
@@ -733,7 +915,11 @@ class PokerScene(BaseScene):
                 window.blit(Assets.images['logo_emoji'], emoji_btn_rect.topleft)
 
                 if self.emoji_panel_open:
-                    panel_rect = pygame.Rect(int(px - sc(150) - sc(350) - sc(20)), int(info_y - sc(200)), int(sc(350)), int(sc(180)))
+                    panel_w, panel_h = int(sc(350)), int(sc(180))
+                    btn_y = int(self.engine.HEIGHT - sc(120))
+                    panel_x = int(self.engine.WIDTH - sc(400) - panel_w // 2)
+                    panel_y = int(btn_y - panel_h - sc(20))
+                    panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
 
                     anim_progress = min(1.0, (current_time - self.emoji_panel_anim_start) / 250.0)
                     t_anim = 1 - (1 - anim_progress) ** 5
@@ -767,6 +953,10 @@ class PokerScene(BaseScene):
         self.animator.draw(window)
 
         window.blit(Assets.images['all_chips'], self.mountain_pos)
+
+        if self.game_phase == "waiting":
+            draw_alpha_rect(window, (0, 0, 0, 160), (int(self.cx - sc(250)), int(self.cy - sc(30)), int(sc(500)), int(sc(60))), (218, 165, 32), int(sc(2)), int(sc(15)))
+            draw_text_centered(window, t("Waiting for players..."), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (int(self.cx - sc(250)), int(self.cy - sc(30)), int(sc(500)), int(sc(60))))
 
         if self._is_my_turn() and self.game_phase not in ["showdown", "waiting"]:
             to_call = self.current_bet - self.round_bets.get(self.engine.my_id, 0)

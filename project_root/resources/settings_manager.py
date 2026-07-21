@@ -28,7 +28,9 @@ DEFAULT_PROGRESS = {
     "current_title": "Новичок",
     "blackjack_count": 0,
     "win_count": 0,
-    "redeemed_codes": []
+    "redeemed_codes": [],
+    "last_spin_date": "",
+    "free_spins": 0
 }
 
 def load_settings():
