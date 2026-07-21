@@ -11,6 +11,7 @@ from scenes.blackjack_scene import BlackjackScene
 from scenes.fool_scene import FoolScene
 from scenes.poker_scene import PokerScene
 from scenes.shop_scene import ShopScene
+from utils.utils import Config, sc, resource_path
 
 class GameEngine:
     def __init__(self):
@@ -126,12 +127,15 @@ class GameEngine:
     def play_track(self):
         try:
             track = self.MUSIC_PLAYLISTS[self.current_theme][self.current_music_mode][self.current_track_index]
-            path = os.path.join("sound", "music", "game" if self.current_music_mode == "game" else "menu", track)
+            raw_path = os.path.join("sound", "music", "game" if self.current_music_mode == "game" else "menu", track)
+
+            path = resource_path(raw_path)
+
             pygame.mixer.music.load(path)
             pygame.mixer.music.set_volume(float(self.volume))
             pygame.mixer.music.play(0)
             if self.muting_music: pygame.mixer.music.pause()
-        except: pass
+        except Exception: pass
 
     def switch_music(self, new_theme, new_mode):
         if new_theme != self.current_theme or new_mode != self.current_music_mode:

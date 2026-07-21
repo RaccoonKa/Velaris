@@ -1,5 +1,17 @@
 import pygame
 import math
+import os
+import sys
+
+
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath('.')
+
+    return os.path.join(base_path, relative_path)
 
 class Config:
     WIDTH = 1920
@@ -19,11 +31,14 @@ def sc(val):
 
 def load_img(path, target_size=None):
     try:
-        img = pygame.image.load(path).convert_alpha()
+        full_path = resource_path(path)
+        img = pygame.image.load(full_path).convert_alpha()
         if target_size:
             return pygame.transform.smoothscale(img, target_size)
-        return pygame.transform.smoothscale(img, (sc(img.get_width()), sc(img.get_height())))
-    except AttributeError:
+        return pygame.transform.smoothscale(
+            img, (sc(img.get_width()), sc(img.get_height()))
+        )
+    except Exception:
         return pygame.Surface((sc(10), sc(10)), pygame.SRCALPHA)
 
 def draw_alpha_rect(surface, color, rect, border_color=(0,0,0), border_width=2, border_radius=0):

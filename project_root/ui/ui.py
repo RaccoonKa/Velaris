@@ -1,5 +1,7 @@
 import pygame
 
+from utils.utils import resource_path
+
 class Button:
     def __init__(self, x, y, width, height, window):
         self.rect = pygame.Rect(x, y, width, height)
@@ -15,9 +17,12 @@ class Button:
 
     def set_button_texture(self, image_path):
         try:
-            self.image = pygame.image.load(image_path).convert_alpha()
-            self.image = pygame.transform.scale(self.image, (self.rect.width, self.rect.height))
-        except AttributeError:
+            full_path = resource_path(image_path)
+            self.image = pygame.image.load(full_path).convert_alpha()
+            self.image = pygame.transform.scale(
+                self.image, (self.rect.width, self.rect.height)
+            )
+        except (AttributeError, FileNotFoundError):
             pass
 
     def set_border(self, size, color):
