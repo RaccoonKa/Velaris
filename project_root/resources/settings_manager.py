@@ -2,7 +2,15 @@ import json
 import os
 import base64
 
-CONFIG_DIR = "configs"
+def get_user_data_dir():
+    appdata = os.getenv('APPDATA')
+    if appdata:
+        data_dir = os.path.join(appdata, "Velaris")
+    else:
+        data_dir = os.path.join(os.path.expanduser("~"), ".velaris")
+    return data_dir
+
+CONFIG_DIR = get_user_data_dir()
 CONFIG_FILE = os.path.join(CONFIG_DIR, "settings.json")
 PROGRESS_FILE = os.path.join(CONFIG_DIR, "progress.json")
 
@@ -44,7 +52,7 @@ def load_settings():
 
 def save_settings(settings):
     if not os.path.exists(CONFIG_DIR):
-        os.makedirs(CONFIG_DIR)
+        os.makedirs(CONFIG_DIR, exist_ok=True)
 
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(settings, f, indent=4)
@@ -62,7 +70,7 @@ def load_progress():
 
 def save_progress(progress):
     if not os.path.exists(CONFIG_DIR):
-        os.makedirs(CONFIG_DIR)
+        os.makedirs(CONFIG_DIR, exist_ok=True)
 
     try:
         json_str = json.dumps(progress)
