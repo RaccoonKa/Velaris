@@ -88,6 +88,7 @@ class PokerScene(BaseScene):
         self.players = {}
         self.money = {}
         self.player_titles = {}
+        self.player_nicknames = {}
         self.active_players = set()
         self.acted_players = set()
 
@@ -182,12 +183,14 @@ class PokerScene(BaseScene):
             self.engine.my_id = 0
             self.init_player(0)
             self.player_titles[0] = self.engine.current_progress.get("current_title", "Новичок")
+            self.player_nicknames[0] = getattr(self.engine, "nickname_text", "Player")
 
             if self.mode == "singleplayer":
                 for i in range(1, 4):
                     self.players[i] = Player(False)
                     self.money[i] = random.randint(5000, 20000)
                     self.player_titles[i] = "Шулер"
+                    self.player_nicknames[i] = f"Bot {i}"
                 self.start_hand()
             else:
                 self.game_phase = "waiting"
@@ -257,7 +260,7 @@ class PokerScene(BaseScene):
 
     def start_hand(self):
         self.reset_game_state()
-        if hasattr(self.engine, 'server') and self.engine.server:
+        if getattr(self.engine, 'server', None):
             self.engine.server.broadcast({"action": "start_hand"})
 
         self.deck.refill_random(52)
@@ -290,7 +293,7 @@ class PokerScene(BaseScene):
                 self._deal_to_player(c, pid)
 
     def _deal_to_player(self, card, pid):
-        if hasattr(self.engine, 'server') and self.engine.server:
+        if getattr(self.engine, 'server', None):
             self.engine.server.broadcast({"action": "deal_player", "target": pid, "val": card.value, "suit": card.suit})
 
         px, py = self._get_player_pos(pid)
@@ -315,7 +318,7 @@ class PokerScene(BaseScene):
     def _deal_community(self, count):
         for _ in range(count):
             c = self.deck.erase(-1)
-            if hasattr(self.engine, 'server') and self.engine.server:
+            if getattr(self.engine, 'server', None):
                 self.engine.server.broadcast({"action": "deal_community", "val": c.value, "suit": c.suit})
             self._deal_community_anim(c)
 
@@ -337,7 +340,7 @@ class PokerScene(BaseScene):
                           lambda card=c: [Assets.sounds['card'].play(), self.community_cards.append(card)], 15, end_angle=angle)
 
     def _sync_state(self):
-        if hasattr(self.engine, 'server') and self.engine.server:
+        if getattr(self.engine, 'server', None):
             data = {
                 "action": "sync",
                 "pot": self.pot,
@@ -353,6 +356,8 @@ class PokerScene(BaseScene):
 
     def _place_bet(self, pid, amount):
         real_amount = min(amount, self.money[pid])
+        if real_amount <= 0: return
+
         self.money[pid] -= real_amount
         self.round_bets[pid] = self.round_bets.get(pid, 0) + real_amount
 
@@ -366,9 +371,27 @@ class PokerScene(BaseScene):
             self.engine.current_progress["money"] = self.money[pid]
             save_progress(self.engine.current_progress)
 
-        if real_amount > 0:
-            Assets.sounds['chip'].play()
-            self.rebuild_placed_chips()
+        Assets.sounds['chip'].play()
+        theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
+
+        chip_val = 100
+        for d in [10000, 2500, 1000, 500, 250, 100]:
+            if real_amount >= d:
+                chip_val = d
+                break
+
+        c_img = self._get_cached_texture(os.path.join("textures", "chips", theme, f"{chip_val}.png"), (self.cw, self.ch))
+        px, py = self._get_player_pos(pid)
+
+        if pid == self.engine.my_id:
+            start_x, start_y = int(px - sc(220)), int(py + sc(80))
+        else:
+            start_x, start_y = int(px - self.w_c // 2), int(py - sc(70))
+
+        target_x = int(px - self.w_c // 2 + random.randint(int(sc(-20)), int(sc(20))))
+        target_y = int(self.cy - sc(20) + random.randint(int(sc(-20)), int(sc(20))))
+
+        self.animator.add(c_img, (start_x, start_y), (target_x, target_y), self.rebuild_placed_chips, 15)
 
     def _check_round_over(self):
         if len(self.active_players) <= 1:
@@ -473,7 +496,7 @@ class PokerScene(BaseScene):
             self.engine.current_progress["money"] = self.money[self.engine.my_id]
             save_progress(self.engine.current_progress)
 
-        if hasattr(self.engine, 'server') and self.engine.server:
+        if getattr(self.engine, 'server', None):
             self.engine.server.broadcast({
                 "action": "showdown_results",
                 "winners": self.last_winners,
@@ -547,25 +570,39 @@ class PokerScene(BaseScene):
             action = data.get("action")
             cid = data.get("client_id")
 
+            if action == "internal_player_joined":
+                self.init_player(cid)
+                profiles = {p: {"title": self.player_titles.get(p, "Новичок"), "nickname": self.player_nicknames.get(p, f"Player {p+1}")} for p in self.players}
+                self.engine.server.broadcast({"action": "profiles_sync", "profiles": profiles})
+                continue
+            elif action == "internal_player_left":
+                self.players.pop(cid, None)
+                self.money.pop(cid, None)
+                if cid in self.active_players:
+                    self.active_players.remove(cid)
+                self.acted_players.discard(cid)
+                continue
+
             pids = list(self.players.keys())
 
-            if action == "set_title":
-                t_val = data.get("title", "Новичок")
-                self.player_titles[cid] = t_val
-                self.engine.server.broadcast({"action": "set_title", "id": cid, "title": t_val})
+            if action == "set_profile":
+                self.player_titles[cid] = data.get("title", "Новичок")
+                self.player_nicknames[cid] = data.get("nickname", "Player")
+                profiles = {p: {"title": self.player_titles.get(p, "Новичок"), "nickname": self.player_nicknames.get(p, f"Player {p+1}")} for p in self.players}
+                self.engine.server.broadcast({"action": "profiles_sync", "profiles": profiles})
             elif action == "emoji":
                 idx = data.get("idx")
                 self._show_emoji(cid, idx)
                 self.engine.server.broadcast({"action": "emoji", "id": cid, "idx": idx})
-            elif action == "fold" and pids[self.current_turn_idx] == cid:
+            elif action == "fold" and pids and self.current_turn_idx < len(pids) and pids[self.current_turn_idx] == cid:
                 if cid in self.active_players:
                     self.active_players.remove(cid)
                 self._next_turn()
-            elif action == "call" and pids[self.current_turn_idx] == cid:
+            elif action == "call" and pids and self.current_turn_idx < len(pids) and pids[self.current_turn_idx] == cid:
                 to_call = self.current_bet - self.round_bets.get(cid, 0)
                 self._place_bet(cid, to_call)
                 self._next_turn()
-            elif action == "raise" and pids[self.current_turn_idx] == cid:
+            elif action == "raise" and pids and self.current_turn_idx < len(pids) and pids[self.current_turn_idx] == cid:
                 amt = data.get("amount", 0)
                 self._place_bet(cid, amt)
                 self._next_turn()
@@ -584,9 +621,15 @@ class PokerScene(BaseScene):
                 self.money.clear()
                 for pid in msg_obj["players"]: self.init_player(pid)
                 self.init_player(self.engine.my_id)
-                self.engine.client.send_data({"action": "set_title", "title": self.engine.current_progress.get("current_title", "Новичок")})
-            elif action == "set_title":
-                self.player_titles[msg_obj["id"]] = msg_obj["title"]
+                self.engine.client.send_data({"action": "set_profile", "title": self.engine.current_progress.get("current_title", "Новичок"), "nickname": getattr(self.engine, "nickname_text", "Player")})
+            elif action == "profiles_sync":
+                for p_key, prof in msg_obj.get("profiles", {}).items():
+                    try:
+                        pid = int(p_key)
+                        self.player_titles[pid] = prof["title"]
+                        self.player_nicknames[pid] = prof["nickname"]
+                    except ValueError:
+                        pass
             elif action == "player_joined":
                 self.init_player(msg_obj["id"])
             elif action == "player_left":
@@ -652,7 +695,7 @@ class PokerScene(BaseScene):
                             self._show_emoji(self.engine.my_id, idx)
                             if self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
                                 self.engine.client.send_data({"action": "emoji", "idx": idx})
-                            elif hasattr(self.engine, 'server') and getattr(self.engine, 'server', None):
+                            elif getattr(self.engine, 'server', None):
                                 self.engine.server.broadcast({"action": "emoji", "id": self.engine.my_id, "idx": idx})
                         return
                     else:
@@ -868,7 +911,7 @@ class PokerScene(BaseScene):
 
             draw_alpha_rect(window, (0, 0, 0, 160), (int(px - sc(150)), int(info_y), int(sc(300)), int(sc(120))), box_color, int(sc(2)), int(sc(10)))
 
-            name = self.engine.nickname_text if pid == self.engine.my_id else f"Bot {pid}"
+            name = self.engine.nickname_text if pid == self.engine.my_id else self.player_nicknames.get(pid, f"Player {pid}" if self.mode != "singleplayer" else f"Bot {pid}")
             p_title = self.player_titles.get(pid, "Шулер")
 
             draw_text_centered(window, f"[{t(p_title)}]", Assets.fonts['text30'], self.get_title_color(p_title), (0,0,0), (int(px - sc(150)), int(info_y + sc(10)), int(sc(300)), int(sc(30))), int(sc(2)))
@@ -903,8 +946,8 @@ class PokerScene(BaseScene):
                         emoji_x = int(px - sc(260))
                         emoji_y = int(info_y - sc(60))
                     else:
-                        emoji_x = int(px + sc(120))
-                        emoji_y = int(info_y)
+                        emoji_x = int(px + sc(200))
+                        emoji_y = int(info_y + sc(60))
 
                     img_rect = current_img.get_rect(center=(emoji_x, emoji_y))
                     window.blit(current_img, img_rect.topleft)

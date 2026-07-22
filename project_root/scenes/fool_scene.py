@@ -46,6 +46,7 @@ class FoolScene(BaseScene):
         self.players = {}
         self.money = {}
         self.player_titles = {}
+        self.player_nicknames = {}
         self.placed_chips = []
         self.card_visuals = {}
         self.ready_to_play = set()
@@ -108,7 +109,7 @@ class FoolScene(BaseScene):
             self.w_c = int(sc(120))
 
         self.cw, self.ch = int(self.w_c * 1.7), int(self.w_c * 0.9)
-        
+
     def get_title_color(self, title):
         if title in ["Разработчик", "Developer", "Millionaire", "Миллионер", "Крути-вези!", "I got lucky!"]:
             t_ms = pygame.time.get_ticks()
@@ -181,9 +182,11 @@ class FoolScene(BaseScene):
             self.engine.my_id = 0
             self.init_player(self.engine.my_id)
             self.player_titles[self.engine.my_id] = self.engine.current_progress.get("current_title", "Новичок")
+            self.player_nicknames[self.engine.my_id] = getattr(self.engine, "nickname_text", "Player")
             if self.mode == "singleplayer":
                 self.init_player(1)
                 self.player_titles[1] = "Крупье на пенсии"
+                self.player_nicknames[1] = "Bot"
 
     def init_player(self, pid):
         self.players[pid] = Player(False)
@@ -224,6 +227,8 @@ class FoolScene(BaseScene):
     def start_shuffling(self):
         self.game_phase = "shuffling"
         self.shuffle_count = 0
+        if self.mode == "multiplayer_host" and self.engine.server:
+            self.engine.server.broadcast({"action": "shuffle_anim"})
         self.do_shuffle_anim()
 
     def do_shuffle_anim(self):
@@ -237,7 +242,8 @@ class FoolScene(BaseScene):
     def on_shuffle_step_done(self):
         self.shuffle_count += 1
         if self.shuffle_count >= 6:
-            self.start_dealing()
+            if self.mode != "multiplayer_client":
+                self.start_dealing()
         else:
             Assets.sounds['card'].play()
             self.do_shuffle_anim()
@@ -253,6 +259,9 @@ class FoolScene(BaseScene):
 
     def deal_next_card(self):
         if not self.deal_queue:
+            if self.mode == "multiplayer_client":
+                return
+
             if self.attacker_pid is None:
                 first_attacker = None
                 lowest_trump = 15
@@ -281,10 +290,14 @@ class FoolScene(BaseScene):
         if target == "trump":
             c = self.deck.cards[0]
             self.trump_card = c
+            if self.mode == "multiplayer_host" and self.engine.server:
+                self.engine.server.broadcast({"action": "deal_anim", "target": "trump", "val": c.value, "suit": c.suit})
             img = self._get_cached_texture(c.get_texture_path(), (self.card_w, self.card_h))
             self._deal_animated(c, self.deck_pos[0] - sc(50), self.deck_pos[1] + sc(20), self.deal_next_card, img=img)
         else:
             c = self.deck.erase(-1)
+            if self.mode == "multiplayer_host" and self.engine.server:
+                self.engine.server.broadcast({"action": "deal_anim", "target": target, "val": c.value, "suit": c.suit})
             px, py = self.get_player_hand_pos(target)
             self._deal_animated(c, px, py, lambda card=c, pid=target: [Assets.sounds['card'].play(), self.players[pid].take_card(card), self.deal_next_card()])
 
@@ -306,9 +319,9 @@ class FoolScene(BaseScene):
 
     def update(self):
         self.animator.update()
-        if self.mode == "multiplayer_host" and self.engine.server:
+        if self.mode == "multiplayer_host" and getattr(self.engine, 'server', None):
             self._handle_server()
-        elif self.mode == "multiplayer_client" and self.engine.client:
+        elif self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
             self._handle_client()
 
         if self.mode in ["singleplayer", "multiplayer_host"]:
@@ -491,9 +504,9 @@ class FoolScene(BaseScene):
                         if 0 <= col < 4 and 0 <= row < 2:
                             idx = row * 4 + col
                             self._show_emoji(self.engine.my_id, idx)
-                            if self.mode == "multiplayer_client" and self.engine.client:
+                            if self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
                                 self.engine.client.send_data({"action": "emoji", "idx": idx})
-                            elif self.engine.server:
+                            elif getattr(self.engine, 'server', None):
                                 self.engine.server.broadcast({"action": "emoji", "id": self.engine.my_id, "idx": idx})
                         return
                     else:
@@ -509,8 +522,8 @@ class FoolScene(BaseScene):
 
                 if self.exit_btn.collidepoint((mx, my)):
                     Assets.sounds['back'].play()
-                    if self.engine.server: self.engine.server.stop(); self.engine.server = None
-                    if self.engine.client: self.engine.client.disconnect(); self.engine.client = None
+                    if getattr(self.engine, 'server', None): self.engine.server.stop(); self.engine.server = None
+                    if getattr(self.engine, 'client', None): self.engine.client.disconnect(); self.engine.client = None
                     if self.engine.my_id in self.money:
                         self.engine.current_progress["money"] = self.money[self.engine.my_id]
                         save_progress(self.engine.current_progress)
@@ -521,7 +534,7 @@ class FoolScene(BaseScene):
                     if self.mode == "multiplayer_client" and self.engine.my_id not in self.ready_to_play:
                         if self.players[self.engine.my_id].get_bet().get_value() > 0 and self.enough_btn.collidepoint((mx, my)):
                             Assets.sounds['enter'].play()
-                            if self.engine.client: self.engine.client.send_data({"action": "enough"})
+                            if getattr(self.engine, 'client', None): self.engine.client.send_data({"action": "enough"})
                         elif self.money[self.engine.my_id] >= 100:
                             self._handle_chip_click(mx, my)
 
@@ -530,7 +543,7 @@ class FoolScene(BaseScene):
                         elif self.players[self.engine.my_id].get_bet().get_value() > 0 and self.enough_btn.collidepoint((mx, my)):
                             Assets.sounds['enter'].play()
                             self.ready_to_play.add(self.engine.my_id)
-                            if self.engine.server: self.engine.server.broadcast({"action": "ready", "id": self.engine.my_id})
+                            if getattr(self.engine, 'server', None): self.engine.server.broadcast({"action": "ready", "id": self.engine.my_id})
                         elif self.engine.my_id not in self.ready_to_play and self.money[self.engine.my_id] >= 100:
                             self._handle_chip_click(mx, my)
 
@@ -540,7 +553,7 @@ class FoolScene(BaseScene):
                         if self.mode == "singleplayer":
                             self.reset_game_state()
                         elif self.mode == "multiplayer_client":
-                            if self.engine.client: self.engine.client.send_data({"action": "restart"})
+                            if getattr(self.engine, 'client', None): self.engine.client.send_data({"action": "restart"})
                         elif self.mode == "multiplayer_host":
                             self.ready_to_play.add(self.engine.my_id)
 
@@ -549,7 +562,7 @@ class FoolScene(BaseScene):
                         if self.table_cards and self.pass_btn.collidepoint((mx, my)):
                             Assets.sounds['enter'].play()
                             if self.mode == "multiplayer_client":
-                                self.engine.client.send_data({"action": "pass"})
+                                getattr(self.engine, 'client', None).send_data({"action": "pass"})
                             else:
                                 self.action_pass(self.engine.my_id)
                             return
@@ -558,7 +571,7 @@ class FoolScene(BaseScene):
                         if self.take_btn.collidepoint((mx, my)):
                             Assets.sounds['enter'].play()
                             if self.mode == "multiplayer_client":
-                                self.engine.client.send_data({"action": "take"})
+                                getattr(self.engine, 'client', None).send_data({"action": "take"})
                             else:
                                 self.action_take(self.engine.my_id)
                             return
@@ -600,7 +613,7 @@ class FoolScene(BaseScene):
 
             if card in valid and len(self.table_cards) < max_attacks:
                 if self.mode == "multiplayer_client":
-                    self.engine.client.send_data({"action": "play_card", "val": card.value, "suit": card.suit})
+                    getattr(self.engine, 'client', None).send_data({"action": "play_card", "val": card.value, "suit": card.suit})
                 else:
                     self.action_play_card(self.engine.my_id, card)
         elif self.game_phase == "defend":
@@ -610,12 +623,16 @@ class FoolScene(BaseScene):
                 valid = self.get_valid_defend_cards(hand, target)
                 if card in valid:
                     if self.mode == "multiplayer_client":
-                        self.engine.client.send_data({"action": "beat_card", "val": card.value, "suit": card.suit})
+                        getattr(self.engine, 'client', None).send_data({"action": "beat_card", "val": card.value, "suit": card.suit})
                     else:
                         self.action_beat_card(self.engine.my_id, card)
 
     def action_play_card(self, pid, card):
-        self.players[pid].get_deck().cards.remove(card)
+        if card in self.players[pid].get_deck().cards:
+            self.players[pid].get_deck().cards.remove(card)
+
+        if self.mode == "multiplayer_host" and getattr(self.engine, 'server', None):
+            self.engine.server.broadcast({"action": "play_card_anim", "pid": pid, "val": card.value, "suit": card.suit})
 
         idx = len(self.table_cards)
         target_x = self.cx - sc(200) + idx * sc(85)
@@ -627,15 +644,20 @@ class FoolScene(BaseScene):
         def finish():
             self.table_cards.append({"attack": card, "defend": None})
             Assets.sounds['card'].play()
-            self.game_phase = "defend"
-            self.current_turn_pid = self.defender_pid
-            self.bot_timer = pygame.time.get_ticks() + random.randint(800, 1500)
-            if self.engine.server: self._broadcast_state()
+            if self.mode != "multiplayer_client":
+                self.game_phase = "defend"
+                self.current_turn_pid = self.defender_pid
+                self.bot_timer = pygame.time.get_ticks() + random.randint(800, 1500)
+                if getattr(self.engine, 'server', None): self._broadcast_state()
 
         self.animator.add(c_img, (px, py), (target_x, target_y), finish, frames=10)
 
     def action_beat_card(self, pid, card):
-        self.players[pid].get_deck().cards.remove(card)
+        if card in self.players[pid].get_deck().cards:
+            self.players[pid].get_deck().cards.remove(card)
+
+        if self.mode == "multiplayer_host" and getattr(self.engine, 'server', None):
+            self.engine.server.broadcast({"action": "beat_card_anim", "pid": pid, "val": card.value, "suit": card.suit})
 
         target_idx = 0
         for i, pair in enumerate(self.table_cards):
@@ -650,16 +672,18 @@ class FoolScene(BaseScene):
         px, py = self.get_player_hand_pos(pid)
 
         def finish():
-            self.table_cards[target_idx]['defend'] = card
+            if target_idx < len(self.table_cards):
+                self.table_cards[target_idx]['defend'] = card
             Assets.sounds['card'].play()
 
-            if len(self.table_cards) == 6 or len(self.players[pid].get_deck().cards) == 0:
-                self.do_bito()
-            else:
-                self.game_phase = "attack"
-                self.current_turn_pid = self.attacker_pid
-                self.bot_timer = pygame.time.get_ticks() + random.randint(800, 1500)
-                if self.engine.server: self._broadcast_state()
+            if self.mode != "multiplayer_client":
+                if len(self.table_cards) == 6 or len(self.players[pid].get_deck().cards) == 0:
+                    self.do_bito()
+                else:
+                    self.game_phase = "attack"
+                    self.current_turn_pid = self.attacker_pid
+                    self.bot_timer = pygame.time.get_ticks() + random.randint(800, 1500)
+                    if getattr(self.engine, 'server', None): self._broadcast_state()
 
         self.animator.add(c_img, (px, py), (target_x, target_y), finish, frames=10)
 
@@ -668,7 +692,7 @@ class FoolScene(BaseScene):
         self.game_phase = "take_add"
         self.current_turn_pid = self.attacker_pid
         self.bot_timer = pygame.time.get_ticks() + random.randint(800, 1500)
-        if self.engine.server: self._broadcast_state()
+        if getattr(self.engine, 'server', None): self._broadcast_state()
 
     def action_pass(self, pid):
         if self.taking:
@@ -701,7 +725,7 @@ class FoolScene(BaseScene):
             self.game_phase = "attack"
             self.bot_timer = pygame.time.get_ticks() + random.randint(800, 1500)
             self.check_game_over()
-            if self.engine.server: self._broadcast_state()
+            if getattr(self.engine, 'server', None): self._broadcast_state()
 
     def do_bito(self):
         self.table_cards.clear()
@@ -722,7 +746,7 @@ class FoolScene(BaseScene):
             self.game_phase = "attack"
             self.bot_timer = pygame.time.get_ticks() + random.randint(800, 1500)
             self.check_game_over()
-            if self.engine.server: self._broadcast_state()
+            if getattr(self.engine, 'server', None): self._broadcast_state()
 
     def get_next_player(self, pid):
         sorted_ids = sorted(list(self.players.keys()))
@@ -785,7 +809,13 @@ class FoolScene(BaseScene):
             else:
                 px = self.get_player_center(pid)
 
-            p_text = self.engine.nickname_text if pid == self.engine.my_id else f"{t('Player ')}{pid + 1}"
+            if pid == self.engine.my_id:
+                p_text = getattr(self.engine, "nickname_text", "Player")
+            elif self.mode == "singleplayer":
+                p_text = "Bot"
+            else:
+                p_text = self.player_nicknames.get(pid, f"{t('Player ')}{pid + 1}")
+
             p_title = self.player_titles.get(pid, "Новичок") if pid != self.engine.my_id else self.engine.current_progress.get("current_title", "Новичок")
 
             if pid == self.engine.my_id:
@@ -874,7 +904,7 @@ class FoolScene(BaseScene):
                     window.set_clip(old_clip)
 
         if self.game_phase == "betting":
-            if (self.mode == "multiplayer_host" or self.mode == "multiplayer_client") and len(self.players) < self.engine.target_players:
+            if (self.mode == "multiplayer_host" or self.mode == "multiplayer_client") and len(self.players) < getattr(self.engine, 'target_players', 2):
                 draw_alpha_rect(window, (0, 0, 0, 160), (int(self.cx - sc(250)), int(self.cy - sc(30)), int(sc(500)), int(sc(60))), (218, 165, 32), int(sc(2)), int(sc(15)))
                 draw_text_centered(window, t("Waiting for players..."), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (int(self.cx - sc(250)), int(self.cy - sc(30)), int(sc(500)), int(sc(60))))
             elif self.engine.my_id not in self.ready_to_play:
@@ -971,6 +1001,8 @@ class FoolScene(BaseScene):
 
             if action == "internal_player_joined":
                 self.init_player(cid)
+                profiles = {pid: {"title": self.player_titles.get(pid, "Новичок"), "nickname": self.player_nicknames.get(pid, f"Player {pid+1}")} for pid in self.players}
+                self.engine.server.broadcast({"action": "profiles_sync", "profiles": profiles})
                 continue
             elif action == "internal_player_left":
                 self.players.pop(cid, None)
@@ -978,10 +1010,11 @@ class FoolScene(BaseScene):
                 self.ready_to_play.discard(cid)
                 continue
 
-            if action == "set_title":
-                t_val = data.get("title", "Новичок")
-                self.player_titles[cid] = t_val
-                self.engine.server.broadcast({"action": "set_title", "id": cid, "title": t_val})
+            if action == "set_profile":
+                self.player_titles[cid] = data.get("title", "Новичок")
+                self.player_nicknames[cid] = data.get("nickname", "Player")
+                profiles = {pid: {"title": self.player_titles.get(pid, "Новичок"), "nickname": self.player_nicknames.get(pid, f"Player {pid+1}")} for pid in self.players}
+                self.engine.server.broadcast({"action": "profiles_sync", "profiles": profiles})
             elif action == "bet" and self.game_phase == "betting":
                 parsed_val = data.get("val")
                 current_bet = self.players[cid].get_bet().get_value()
@@ -1046,14 +1079,83 @@ class FoolScene(BaseScene):
                 self.money.clear()
                 for pid in msg["players"]: self.init_player(pid)
                 self.init_player(self.engine.my_id)
-                self.engine.client.send_data({"action": "set_title", "title": self.engine.current_progress.get("current_title", "Новичок")})
-            elif action == "set_title":
-                self.player_titles[msg["id"]] = msg["title"]
+                self.engine.client.send_data({"action": "set_profile", "title": self.engine.current_progress.get("current_title", "Новичок"), "nickname": getattr(self.engine, "nickname_text", "Player")})
+            elif action == "profiles_sync":
+                for p_key, prof in msg.get("profiles", {}).items():
+                    try:
+                        pid = int(p_key)
+                        self.player_titles[pid] = prof["title"]
+                        self.player_nicknames[pid] = prof["nickname"]
+                    except ValueError:
+                        pass
             elif action == "player_joined":
                 self.init_player(msg["id"])
             elif action == "player_left":
                 self.players.pop(msg["id"], None)
                 self.money.pop(msg["id"], None)
+            elif action == "shuffle_anim":
+                self.shuffle_count = 0
+                self.do_shuffle_anim()
+            elif action == "deal_anim":
+                if self.deck.cards:
+                    self.deck.erase(-1)
+                target = msg["target"]
+                c = Card(msg["val"], msg["suit"])
+                if target == "trump":
+                    self.trump_card = c
+                    img = self._get_cached_texture(c.get_texture_path(), (self.card_w, self.card_h))
+                    self._deal_animated(c, self.deck_pos[0] - sc(50), self.deck_pos[1] + sc(20), lambda: None, img=img)
+                else:
+                    px, py = self.get_player_hand_pos(target)
+                    self._deal_animated(c, px, py, lambda card=c, pid=target: [Assets.sounds['card'].play(), self.players[pid].take_card(card)])
+            elif action == "play_card_anim":
+                pid = msg["pid"]
+                c = Card(msg["val"], msg["suit"])
+                hand = self.players[pid].get_deck().cards
+                card_to_remove = next((card for card in hand if card.value == c.value and card.suit == c.suit), None)
+                if not card_to_remove and hand:
+                    card_to_remove = hand[0]
+                if card_to_remove:
+                    hand.remove(card_to_remove)
+
+                idx = len(self.table_cards)
+                target_x = self.cx - sc(200) + idx * sc(85)
+                target_y = self.cy - sc(100)
+                px, py = self.get_player_hand_pos(pid)
+                c_img = self._get_cached_texture(c.get_texture_path(), (self.card_w, self.card_h))
+
+                def finish_play():
+                    self.table_cards.append({"attack": c, "defend": None})
+                    Assets.sounds['card'].play()
+
+                self.animator.add(c_img, (px, py), (target_x, target_y), finish_play, frames=10)
+            elif action == "beat_card_anim":
+                pid = msg["pid"]
+                c = Card(msg["val"], msg["suit"])
+                hand = self.players[pid].get_deck().cards
+                card_to_remove = next((card for card in hand if card.value == c.value and card.suit == c.suit), None)
+                if not card_to_remove and hand:
+                    card_to_remove = hand[0]
+                if card_to_remove:
+                    hand.remove(card_to_remove)
+
+                target_idx = 0
+                for i, pair in enumerate(self.table_cards):
+                    if not pair['defend']:
+                        target_idx = i
+                        break
+
+                target_x = self.cx - sc(200) + target_idx * sc(85) + sc(20)
+                target_y = self.cy - sc(80)
+                px, py = self.get_player_hand_pos(pid)
+                c_img = self._get_cached_texture(c.get_texture_path(), (self.card_w, self.card_h))
+
+                def finish_beat():
+                    if target_idx < len(self.table_cards):
+                        self.table_cards[target_idx]['defend'] = c
+                    Assets.sounds['card'].play()
+
+                self.animator.add(c_img, (px, py), (target_x, target_y), finish_beat, frames=10)
             elif action == "bet":
                 cid = msg["id"]
                 bet_val = msg["val"]
