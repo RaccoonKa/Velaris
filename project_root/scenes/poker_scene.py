@@ -91,6 +91,7 @@ class PokerScene(BaseScene):
         self.player_nicknames = {}
         self.active_players = set()
         self.acted_players = set()
+        self.ready_to_play = set()
 
         self.deck = Deck()
         self.community_cards = []
@@ -243,6 +244,7 @@ class PokerScene(BaseScene):
 
         self.active_players = set(self.players.keys())
         self.acted_players.clear()
+        self.ready_to_play.clear()
         self.bot_timer = 0
 
         if self.mode == "singleplayer":
@@ -510,6 +512,8 @@ class PokerScene(BaseScene):
             self._handle_server()
             if self.game_phase == "waiting" and len(self.players) == getattr(self.engine, 'target_players', 2):
                 self.start_hand()
+            elif self.game_phase == "showdown" and len(self.players) > 0 and len(self.ready_to_play) == len(self.players):
+                self.start_hand()
         elif self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
             self._handle_client()
 
@@ -581,6 +585,7 @@ class PokerScene(BaseScene):
                 if cid in self.active_players:
                     self.active_players.remove(cid)
                 self.acted_players.discard(cid)
+                self.ready_to_play.discard(cid)
                 continue
 
             pids = list(self.players.keys())
@@ -607,7 +612,8 @@ class PokerScene(BaseScene):
                 self._place_bet(cid, amt)
                 self._next_turn()
             elif action == "restart" and self.game_phase == "showdown":
-                self.start_hand()
+                self.ready_to_play.add(cid)
+                self.engine.server.broadcast({"action": "ready", "id": cid})
 
     def _handle_client(self):
         while not self.engine.client.message_queue.empty():
@@ -660,6 +666,8 @@ class PokerScene(BaseScene):
                 self.game_phase = "showdown"
             elif action == "emoji":
                 self._show_emoji(msg_obj["id"], msg_obj["idx"])
+            elif action == "ready":
+                self.ready_to_play.add(msg_obj["id"])
             elif action == "start_hand":
                 self.reset_game_state()
 
@@ -717,11 +725,14 @@ class PokerScene(BaseScene):
                     return
 
                 if self.game_phase == "showdown":
-                    if self.restart_btn.collidepoint(mx, my):
+                    if self.restart_btn.collidepoint(mx, my) and self.engine.my_id not in self.ready_to_play:
                         Assets.sounds['enter'].play()
                         if self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
                             self.engine.client.send_data({"action": "restart"})
-                        else:
+                        elif self.mode == "multiplayer_host":
+                            self.ready_to_play.add(self.engine.my_id)
+                            if getattr(self.engine, 'server', None): self.engine.server.broadcast({"action": "ready", "id": self.engine.my_id})
+                        elif self.mode == "singleplayer":
                             self.start_hand()
                     return
 
@@ -1035,16 +1046,22 @@ class PokerScene(BaseScene):
             if self.engine.my_id in self.last_winners:
                 text = t("You win!")
             else:
-                text = t(f"Bot {self.last_winners[0]} wins!") if len(self.last_winners) == 1 else t("Split pot!")
+                winner_id = self.last_winners[0]
+                winner_name = self.player_nicknames.get(winner_id, f"Player {winner_id}" if self.mode != "singleplayer" else f"Bot {winner_id}")
+                text = t(f"{winner_name} wins!") if len(self.last_winners) == 1 else t("Split pot!")
 
             win_rect = pygame.Rect(0, 0, int(sc(900)), int(sc(120)))
             win_rect.center = (self.cx, self.cy)
             draw_alpha_rect(window, (0, 0, 0, 180), win_rect, (218, 165, 32), int(sc(3)), int(sc(15)))
             draw_text_centered(window, text, Assets.fonts['f80'], (255, 215, 0), (0, 0, 0), win_rect)
 
-            h_rs = self.restart_btn.collidepoint(mx, my)
-            draw_alpha_rect(window, (0, 0, 0, 160), self.restart_btn, (255, 215, 0) if h_rs else (218, 165, 32), int(sc(3)) if h_rs else int(sc(2)), int(sc(15)))
-            draw_text_centered(window, t("Next Hand"), Assets.fonts['f60'] if h_rs else Assets.fonts['f50'], "gradient" if h_rs else (255, 255, 255), (0, 0, 0), self.restart_btn)
+            if self.mode == "singleplayer" or self.engine.my_id not in self.ready_to_play:
+                h_rs = self.restart_btn.collidepoint(mx, my)
+                draw_alpha_rect(window, (0, 0, 0, 160), self.restart_btn, (255, 215, 0) if h_rs else (218, 165, 32), int(sc(3)) if h_rs else int(sc(2)), int(sc(15)))
+                draw_text_centered(window, t("Next Hand"), Assets.fonts['f60'] if h_rs else Assets.fonts['f50'], "gradient" if h_rs else (255, 255, 255), (0, 0, 0), self.restart_btn)
+            else:
+                draw_alpha_rect(window, (0, 0, 0, 160), self.restart_btn, (218, 165, 32), int(sc(2)), int(sc(15)))
+                draw_text_centered(window, t("Waiting for players..."), Assets.fonts['text40'], (255, 255, 255), (0, 0, 0), self.restart_btn)
 
         can_exit = self.game_phase in ["waiting", "showdown"]
         if can_exit:

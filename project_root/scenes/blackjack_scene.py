@@ -320,7 +320,7 @@ class BlackjackScene(BaseScene):
                                 if getattr(self.engine, 'server', None): self.engine.server.broadcast({"action": "phase", "phase": "playing", "turn": self.current_turn_index})
 
                 elif self.game_phase == "game_over":
-                    if self.restart_btn_rect.collidepoint((mx, my)):
+                    if self.restart_btn_rect.collidepoint((mx, my)) and self.engine.my_id not in self.ready_to_play:
                         Assets.sounds['enter'].play()
                         if self.mode == "singleplayer":
                             self.reset_game_state()
@@ -680,7 +680,7 @@ class BlackjackScene(BaseScene):
                     self.reset_game_state()
                     self.stats_saved_for_this_round = False
             elif action == "game_over":
-                self.results = msg_obj["results"]
+                self.results = {int(k): v for k, v in msg_obj["results"].items()}
                 self.game_phase = "game_over"
                 if self.engine.my_id in self.results:
                     res = self.results[self.engine.my_id]
@@ -918,7 +918,7 @@ class BlackjackScene(BaseScene):
                 draw_text_centered(window, t("Restart"), Assets.fonts['f60'] if hovered else Assets.fonts['f50'], "gradient" if hovered else (255, 255, 255), (0, 0, 0), self.restart_btn_rect, 0)
             else:
                 draw_alpha_rect(window, (0, 0, 0, 160), self.restart_btn_rect, (218, 165, 32), int(sc(2)), int(sc(15)))
-                draw_text_centered(window, t("Waiting..."), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), self.restart_btn_rect, 0)
+                draw_text_centered(window, t("Waiting for players..."), Assets.fonts['text40'], (255, 255, 255), (0, 0, 0), self.restart_btn_rect, 0)
 
         has_bet = self.players[self.engine.my_id].get_bet().get_value() > 0 if self.engine.my_id in self.players else False
         can_exit = (self.game_phase == "game_over") or (self.game_phase == "betting" and not has_bet)
