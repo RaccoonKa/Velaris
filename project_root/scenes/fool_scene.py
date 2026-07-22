@@ -472,9 +472,10 @@ class FoolScene(BaseScene):
         mx, my = self.engine.mx, self.engine.my
 
         emoji_btn_rect = pygame.Rect(int(self.cx + sc(280)), int(self.engine.HEIGHT - sc(200)), self.emoji_btn_size, self.emoji_btn_size)
-
+        reset_rect = pygame.Rect(int(self.mountain_pos[0] + sc(90)), int(self.mountain_pos[1] - sc(160)), int(sc(300)), int(sc(40)))
+        
         for event in events:
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+            if event.type == pygame.MOUSEBUTTONDOWN and (event.button == 3 or (event.button == 1 and reset_rect.collidepoint(mx, my))):
                 if self.game_phase == "betting" and self.engine.my_id not in self.ready_to_play:
                     current_bet = self.players[self.engine.my_id].get_bet().get_value() if self.engine.my_id in self.players else 0
                     if current_bet > 0:
@@ -922,8 +923,11 @@ class FoolScene(BaseScene):
                 if self.money[self.engine.my_id] >= 10000: self.set_bet_10000.draw()
 
                 if self.players[self.engine.my_id].get_bet().get_value() > 0:
-                    draw_text_centered(window, t("Right click to reset raise"), Assets.fonts['text30'], (200, 200, 200), (0, 0, 0),
-                                       (int(self.mountain_pos[0] + sc(90)), int(self.mountain_pos[1] - sc(160)), int(sc(300)), int(sc(30))))
+                    reset_rect = pygame.Rect(int(self.mountain_pos[0] + sc(90)), int(self.mountain_pos[1] - sc(160)), int(sc(300)), int(sc(40)))
+                    h_res = reset_rect.collidepoint(mx, my)
+                    b_color = (255, 100, 100) if h_res else (200, 50, 50)
+                    draw_alpha_rect(window, (0, 0, 0, 160), reset_rect, b_color, int(sc(3)) if h_res else int(sc(2)), int(sc(10)))
+                    draw_text_centered(window, t("Reset Bet"), Assets.fonts['text30'], (255, 255, 255), (0, 0, 0), reset_rect)
 
                     h_en = self.enough_btn.collidepoint(mx, my)
                     b_col = (255, 215, 0) if h_en else (218, 165, 32)

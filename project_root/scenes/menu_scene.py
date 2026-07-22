@@ -514,11 +514,23 @@ class MenuScene(BaseScene):
     def handle_events(self, events):
         mx, my = self.engine.mx, self.engine.my
         for event in events:
+            if event.type == pygame.TEXTINPUT:
+                if self.showIPInput:
+                    if len(self.ip_text) < 15 and event.text in "0123456789.":
+                        self.ip_text += event.text
+                elif self.showSettings and getattr(self, "showBonusInput", False):
+                    if len(self.bonus_text) < 10 and event.text.upper() in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789":
+                        self.bonus_text += event.text.upper()
+                elif self.showSettings and self.settings_tab == "general" and self.nickname_input_active:
+                    if len(self.engine.nickname_text) < 15 and event.text.isprintable():
+                        self.engine.nickname_text += event.text
+
             if event.type == pygame.KEYDOWN:
                 if self.showIPInput:
                     if event.key == pygame.K_BACKSPACE:
                         self.ip_text = self.ip_text[:-1]
                     elif event.key == pygame.K_RETURN:
+                        pygame.key.stop_text_input()
                         ip_target = self.ip_text.strip() if self.ip_text.strip() else '127.0.0.1'
                         Assets.sounds['enter'].play()
                         self._draw_overlay_message(t("Connecting to server..."), self.engine.WINDOW)
@@ -534,10 +546,12 @@ class MenuScene(BaseScene):
                             self.ip_text += event.unicode
                 elif self.showSettings and getattr(self, "showBonusInput", False):
                     if event.key == pygame.K_ESCAPE:
+                        pygame.key.stop_text_input()
                         Assets.sounds['back'].play(); self.showBonusInput = False
                     elif event.key == pygame.K_BACKSPACE:
                         self.bonus_text = self.bonus_text[:-1]
                     elif event.key == pygame.K_RETURN:
+                        pygame.key.stop_text_input()
                         Assets.sounds['enter'].play(); self._check_bonus_code()
                     else:
                         if len(self.bonus_text) < 10 and event.unicode.upper() in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789":
@@ -546,6 +560,7 @@ class MenuScene(BaseScene):
                     if event.key == pygame.K_BACKSPACE:
                         self.engine.nickname_text = self.engine.nickname_text[:-1]
                     elif event.key == pygame.K_RETURN:
+                        pygame.key.stop_text_input()
                         Assets.sounds['enter'].play()
                         self.nickname_input_active = False
                         self.engine.current_settings["nickname"] = self.engine.nickname_text
@@ -560,6 +575,7 @@ class MenuScene(BaseScene):
                               self.showHostPlayersMenu or self.showIPInput or getattr(self, "showGameChoice", False))
 
                 if in_submenu and self.back_btn.collidepoint(mx, my) and not getattr(self, "showBonusInput", False):
+                    pygame.key.stop_text_input()
                     Assets.sounds['back'].play()
                     self.engine.pick_random_emotion()
                     if getattr(self, "showGameChoice", False) or self.showAuthors:
@@ -666,6 +682,7 @@ class MenuScene(BaseScene):
                         self.showHostJoinMenu = False
                         self.showIPInput = True
                         self.ip_text = ""
+                        pygame.key.start_text_input()
 
                 elif self.showHostPlayersMenu:
                     count = 0
@@ -684,6 +701,7 @@ class MenuScene(BaseScene):
 
                 elif self.showIPInput:
                     if self.connect_btn_rect.collidepoint(mx, my):
+                        pygame.key.stop_text_input()
                         ip_target = self.ip_text.strip() if self.ip_text.strip() else '127.0.0.1'
                         Assets.sounds['enter'].play()
                         self._draw_overlay_message(t("Connecting to server..."), self.engine.WINDOW)
@@ -698,19 +716,33 @@ class MenuScene(BaseScene):
                 elif self.showSettings:
                     if getattr(self, "showBonusInput", False):
                         if self.bonus_activate_btn.collidepoint(mx, my):
+                            pygame.key.stop_text_input()
                             Assets.sounds['enter'].play(); self._check_bonus_code()
                         elif self.bonus_back_btn.collidepoint(mx, my):
+                            pygame.key.stop_text_input()
                             Assets.sounds['back'].play(); self.showBonusInput = False
                     else:
                         if self.settings_tab =="menu":
                             if self.gen_tab_btn.collidepoint(mx, my): Assets.sounds['enter'].play(); self.settings_tab = "general"
                             elif self.theme_tab_btn.collidepoint(mx, my): Assets.sounds['enter'].play(); self.settings_tab = "themes"
                             elif self.tut_tab_btn.collidepoint(mx, my): Assets.sounds['enter'].play(); self.settings_tab = "tutorial"
-                            elif self.bonus_tab_btn.collidepoint(mx, my): Assets.sounds['enter'].play(); self.showBonusInput = True; self.bonus_text = ""; self.bonus_message_timer = 0
+                            elif self.bonus_tab_btn.collidepoint(mx, my):
+                                Assets.sounds['enter'].play()
+                                self.showBonusInput = True
+                                self.bonus_text = ""
+                                self.bonus_message_timer = 0
+                                pygame.key.start_text_input()
                         elif self.settings_tab == "general":
+                            old_nick_active = self.nickname_input_active
                             self.nickname_input_active = self.nickname_input_rect.collidepoint(mx, my)
 
+                            if self.nickname_input_active and not old_nick_active:
+                                pygame.key.start_text_input()
+                            elif not self.nickname_input_active and old_nick_active:
+                                pygame.key.stop_text_input()
+
                             if self.btn_save_nick.collidepoint(mx, my):
+                                pygame.key.stop_text_input()
                                 Assets.sounds['enter'].play(); self.nickname_input_active = False
                                 self.engine.current_settings["nickname"] = self.engine.nickname_text
                                 save_settings(self.engine.current_settings)

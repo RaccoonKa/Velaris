@@ -677,7 +677,8 @@ class PokerScene(BaseScene):
         info_y_my = py_my + self.card_h + sc(10)
 
         emoji_btn_rect = pygame.Rect(int(px_my - sc(150) - self.emoji_btn_size - sc(15)), int(info_y_my + sc(20)), self.emoji_btn_size, self.emoji_btn_size)
-
+        reset_rect = pygame.Rect(int(self.mountain_pos[0] + sc(90)), int(self.mountain_pos[1] - sc(160)), int(sc(300)), int(sc(40)))
+        
         panel_w, panel_h = int(sc(350)), int(sc(180))
         btn_y = int(self.engine.HEIGHT - sc(120))
         panel_x = int(self.engine.WIDTH - sc(400) - panel_w // 2)
@@ -685,7 +686,7 @@ class PokerScene(BaseScene):
         panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
 
         for event in events:
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+            if event.type == pygame.MOUSEBUTTONDOWN and (event.button == 3 or (event.button == 1 and reset_rect.collidepoint(mx, my))):
                 if self.staged_raise > 0:
                     Assets.sounds['chip'].play()
                     self.staged_raise = 0
@@ -1039,8 +1040,11 @@ class PokerScene(BaseScene):
             if my_m >= to_call + self.staged_raise + 10000: self.set_bet_10000.draw()
 
             if self.staged_raise > 0:
-                draw_text_centered(window, t("Right click to reset raise"), Assets.fonts['text30'], (200, 200, 200), (0, 0, 0),
-                                   (int(self.mountain_pos[0] + sc(90)), int(self.mountain_pos[1] - sc(160)), int(sc(300)), int(sc(30))))
+                reset_rect = pygame.Rect(int(self.mountain_pos[0] + sc(90)), int(self.mountain_pos[1] - sc(160)), int(sc(300)), int(sc(40)))
+                h_res = reset_rect.collidepoint(mx, my)
+                b_color = (255, 100, 100) if h_res else (200, 50, 50)
+                draw_alpha_rect(window, (0, 0, 0, 160), reset_rect, b_color, int(sc(3)) if h_res else int(sc(2)), int(sc(10)))
+                draw_text_centered(window, t("Reset Bet"), Assets.fonts['text30'], (255, 255, 255), (0, 0, 0), reset_rect)
 
         if self.game_phase == "showdown":
             if self.engine.my_id in self.last_winners:

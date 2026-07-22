@@ -211,7 +211,9 @@ class GameEngine:
                     dark_overlay.fill((0, 0, 0, alpha))
                     self.WINDOW.blit(dark_overlay, (0, 0))
 
-            self.WINDOW.blit(self.current_cursor, (int(self.mx - self.cursor_offset[0]), int(self.my - self.cursor_offset[1])))
+            if sys.platform not in ("android", "ios"):
+                self.WINDOW.blit(self.current_cursor, (int(self.mx - self.cursor_offset[0]), int(self.my - self.cursor_offset[1])))
+
             pygame.display.flip()
 
             if self.current_vsync:

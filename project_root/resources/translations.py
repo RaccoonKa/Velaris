@@ -111,7 +111,8 @@ TRANSLATIONS = {
         "blackjack_rules": "Goal: Score 21 or get closer to 21 than the dealer.\nCards 2-10 are face value, Pictures are 10, Aces are 1 or 11.\nActions: 'Get' for another card, 'Pass' to hold your current hand.\nIf you go over 21, you bust and lose immediately.\nThe dealer must draw cards until they reach at least 17.",
         "durak_rules": "Goal: Get rid of all your cards! The last player with cards loses.\nThe player with the lowest trump card attacks first.\nDefender must beat cards with a higher card of the same suit or a trump.\nIf you can't beat the attack, you must take all cards on the table.\nAttackers can add cards of the same rank as those on the table.",
         "poker_rules": "Goal: Make the best 5-card hand (2 private + 5 community cards).\nPlayers use Call (match bet), Raise (increase bet), Fold (give up),\nor Check (pass turn without betting).\n4 Betting rounds: Pre-flop, Flop (3 cards), Turn (1), River (1).\nThe highest combination at the showdown wins the pot!",
-        "Крути-вези!": "I got lucky!"
+        "Крути-вези!": "I got lucky!",
+        "Reset Bet": "Reset Bet"
     },
     "ru": {
         "Play": "Играть", "Settings": "Настройки", "Authors": "Авторы", "Exit": "Выход",
@@ -225,7 +226,8 @@ TRANSLATIONS = {
         "blackjack_rules": "Цель: Набрать 21 очко или быть ближе к 21, чем дилер.\nКарты 2-10 по номиналу, Картинки - 10, Туз - 1 или 11.\nДействия: 'Взять' - еще карту, 'Пас' - оставить текущую руку.\nЕсли набираешь больше 21 - это перебор, ты сразу проиграл.\nДилер обязан брать карты, пока не наберет минимум 17 очков.",
         "durak_rules": "Цель: Избавиться от всех карт! Последний с картами - проиграл.\nИгру начинает тот, у кого на руках козырь наименьшего достоинства.\nЗащитник бьет картой старше той же масти или любым козырем.\nНе можешь побить атаку - забираешь все карты со стола себе.\nАтакующие могут подкидывать карты того же номинала, что уже есть.",
         "poker_rules": "Цель: Собрать лучшую комбинацию из 5 карт (2 твои + 5 общих).\nДоступные действия: Колл (уравнять), Рейз (повысить), Фолд (сбросить)\nили Чек (передать ход, не делая ставку).\n4 раунда: Префлоп, Флоп (3 карты), Терн (1 карта), Ривер (1 карта).\nЛучшая покерная комбинация на вскрытии забирает весь банк!",
-        "Крути-вези!": "Крути-вези!"
+        "Крути-вези!": "Крути-вези!",
+        "Reset Bet": "Сброс ставки"
     }
 }
 

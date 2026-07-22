@@ -1,8 +1,12 @@
 import json
 import os
 import base64
+import sys
 
 def get_user_data_dir():
+    if sys.platform in ("android", "ios"):
+        return "."
+
     appdata = os.getenv('APPDATA')
     if appdata:
         data_dir = os.path.join(appdata, "Velaris")
