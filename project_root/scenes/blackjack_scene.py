@@ -125,8 +125,10 @@ class BlackjackScene(BaseScene):
         self.emoji_panel_open = False
         self.emoji_panel_anim_start = 0
         if full_reset:
-            for pid in list(self.money.keys()):
-                self.money[pid] = self.engine.current_progress.get("money", 10000)
+            self.players.clear()
+            self.money.clear()
+            self.player_titles.clear()
+            self.player_nicknames.clear()
 
     def get_player_center(self, pid):
         sorted_ids = sorted(list(self.players.keys()))
@@ -214,7 +216,7 @@ class BlackjackScene(BaseScene):
 
         emoji_btn_rect = pygame.Rect(int(px_my + sc(200)), int(self.engine.HEIGHT - sc(115)), self.emoji_btn_size, self.emoji_btn_size)
         reset_rect = pygame.Rect(int(self.mountain_pos[0] + sc(90)), int(self.mountain_pos[1] - sc(160)), int(sc(300)), int(sc(40)))
-        
+
         for event in events:
             if event.type == pygame.MOUSEBUTTONDOWN and (event.button == 3 or (event.button == 1 and reset_rect.collidepoint(mx, my))):
                 if self.game_phase == "betting" and self.engine.my_id not in self.ready_to_play:
@@ -309,7 +311,7 @@ class BlackjackScene(BaseScene):
                                 p_len = len(self.players[self.engine.my_id].get_deck()) + 1
                                 end_x = int(px_my - (self.card_w + (p_len - 1) * sc(40)) // 2 + (p_len - 1) * sc(40))
                                 end_y = int(self.engine.HEIGHT - sc(250))
-                                self._deal_animated(c, end_x, end_y, lambda card=c: [Assets.sounds['card'].play(), self.players[self.engine.my_id].take_card(card)])
+                                self._deal_animated(c, end_x, end_y, lambda card=c, p_id=self.engine.my_id: [Assets.sounds['card'].play(), self.players[p_id].take_card(card) if p_id in self.players else None])
                                 if getattr(self.engine, 'server', None): self.engine.server.broadcast({"action": "deal", "target": self.engine.my_id, "val": c.value, "suit": c.suit})
 
                         if self.pass_btn_rect.collidepoint((mx, my)):
@@ -419,7 +421,7 @@ class BlackjackScene(BaseScene):
                     end_y = int(self.engine.HEIGHT - sc(250))
                 else:
                     end_y = int(sc(150))
-                self._deal_animated(c, end_x, end_y, lambda card=c, p_id=pid: [Assets.sounds['card'].play(), self.players[p_id].take_card(card)])
+                self._deal_animated(c, end_x, end_y, lambda card=c, p_id=pid: [Assets.sounds['card'].play(), self.players[p_id].take_card(card) if p_id in self.players else None])
 
             c_d1 = self.deck.erase(random.randint(0, len(self.deck) - 1))
             if getattr(self.engine, 'server', None): self.engine.server.broadcast({"action": "deal", "target": "dealer", "val": c_d1.value, "suit": c_d1.suit, "hidden": True})
@@ -435,7 +437,7 @@ class BlackjackScene(BaseScene):
                     end_y = int(self.engine.HEIGHT - sc(250))
                 else:
                     end_y = int(sc(150))
-                self._deal_animated(c, end_x, end_y, lambda card=c, p_id=pid: [Assets.sounds['card'].play(), self.players[p_id].take_card(card)])
+                self._deal_animated(c, end_x, end_y, lambda card=c, p_id=pid: [Assets.sounds['card'].play(), self.players[p_id].take_card(card) if p_id in self.players else None])
 
             c_d2 = self.deck.erase(random.randint(0, len(self.deck) - 1))
             if getattr(self.engine, 'server', None): self.engine.server.broadcast({"action": "deal", "target": "dealer", "val": c_d2.value, "suit": c_d2.suit, "hidden": False})
@@ -522,6 +524,9 @@ class BlackjackScene(BaseScene):
                 self.players.pop(cid, None)
                 self.money.pop(cid, None)
                 self.ready_to_play.discard(cid)
+                self.results.pop(cid, None)
+                self.player_titles.pop(cid, None)
+                self.player_nicknames.pop(cid, None)
                 continue
 
             if action == "set_profile":
@@ -530,37 +535,39 @@ class BlackjackScene(BaseScene):
                 profiles = {p: {"title": self.player_titles.get(p, "Новичок"), "nickname": self.player_nicknames.get(p, f"Player {p+1}")} for p in self.players}
                 self.engine.server.broadcast({"action": "profiles_sync", "profiles": profiles})
             elif action == "bet" and self.game_phase == "betting":
-                bet_val = data.get("val")
-                current_bet = self.players[cid].get_bet().get_value()
-                if self.money.get(cid, 0) >= bet_val and cid not in self.ready_to_play and current_bet + bet_val <= 100000:
-                    Assets.sounds['chip'].play()
-                    self.players[cid].get_bet().value += bet_val
-                    self.money[cid] -= bet_val
-                    if cid == self.engine.my_id:
-                        self.engine.current_progress["money"] = self.money[self.engine.my_id]
-                        save_progress(self.engine.current_progress)
-                    theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
-                    c_img = self._get_cached_texture(os.path.join("textures", "chips", theme, f"{bet_val}.png"), (self.cw, self.ch))
-                    px = self.get_player_center(cid)
-                    anim_start = (int(self.mountain_pos[0] + sc(100)), int(self.mountain_pos[1] + sc(80)))
-                    temp_val = self.players[cid].get_bet().get_value()
-                    count = sum(temp_val // d for d in [10000, 2500, 1000, 500, 250, 100])
-                    anim_end = (int(px - self.cw // 2), int(self.cy - self.ch // 2 - max(0, count - 1) * sc(8)))
-                    self.animator.add(c_img, anim_start, anim_end, self.rebuild_placed_chips, 20)
-                    self.engine.server.broadcast({"action": "bet", "id": cid, "val": bet_val})
+                if cid in self.players:
+                    bet_val = data.get("val")
+                    current_bet = self.players[cid].get_bet().get_value()
+                    if self.money.get(cid, 0) >= bet_val and cid not in self.ready_to_play and current_bet + bet_val <= 100000:
+                        Assets.sounds['chip'].play()
+                        self.players[cid].get_bet().value += bet_val
+                        self.money[cid] -= bet_val
+                        if cid == self.engine.my_id:
+                            self.engine.current_progress["money"] = self.money[self.engine.my_id]
+                            save_progress(self.engine.current_progress)
+                        theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
+                        c_img = self._get_cached_texture(os.path.join("textures", "chips", theme, f"{bet_val}.png"), (self.cw, self.ch))
+                        px = self.get_player_center(cid)
+                        anim_start = (int(self.mountain_pos[0] + sc(100)), int(self.mountain_pos[1] + sc(80)))
+                        temp_val = self.players[cid].get_bet().get_value()
+                        count = sum(temp_val // d for d in [10000, 2500, 1000, 500, 250, 100])
+                        anim_end = (int(px - self.cw // 2), int(self.cy - self.ch // 2 - max(0, count - 1) * sc(8)))
+                        self.animator.add(c_img, anim_start, anim_end, self.rebuild_placed_chips, 20)
+                        self.engine.server.broadcast({"action": "bet", "id": cid, "val": bet_val})
             elif action == "cancel_bet" and self.game_phase == "betting":
-                current_bet = self.players[cid].get_bet().get_value()
-                if current_bet > 0 and cid not in self.ready_to_play:
-                    Assets.sounds['chip'].play()
-                    self.money[cid] += current_bet
-                    self.players[cid].get_bet().value = 0
-                    if cid == self.engine.my_id:
-                        self.engine.current_progress["money"] = self.money[self.engine.my_id]
-                        save_progress(self.engine.current_progress)
-                    self.rebuild_placed_chips()
-                    self.engine.server.broadcast({"action": "cancel_bet", "id": cid})
+                if cid in self.players:
+                    current_bet = self.players[cid].get_bet().get_value()
+                    if current_bet > 0 and cid not in self.ready_to_play:
+                        Assets.sounds['chip'].play()
+                        self.money[cid] += current_bet
+                        self.players[cid].get_bet().value = 0
+                        if cid == self.engine.my_id:
+                            self.engine.current_progress["money"] = self.money[self.engine.my_id]
+                            save_progress(self.engine.current_progress)
+                        self.rebuild_placed_chips()
+                        self.engine.server.broadcast({"action": "cancel_bet", "id": cid})
             elif action == "enough" and self.game_phase == "betting":
-                if self.players[cid].get_bet().get_value() > 0:
+                if cid in self.players and self.players[cid].get_bet().get_value() > 0:
                     Assets.sounds['enter'].play()
                     self.ready_to_play.add(cid)
                     self.engine.server.broadcast({"action": "ready", "id": cid})
@@ -575,7 +582,7 @@ class BlackjackScene(BaseScene):
                         end_y = int(self.engine.HEIGHT - sc(250))
                     else:
                         end_y = int(sc(150))
-                    self._deal_animated(c, end_x, end_y, lambda card=c, pid=cid: [Assets.sounds['card'].play(), self.players[pid].take_card(card)])
+                    self._deal_animated(c, end_x, end_y, lambda card=c, pid=cid: [Assets.sounds['card'].play(), self.players[pid].take_card(card) if pid in self.players else None])
                     self.engine.server.broadcast({"action": "deal", "target": cid, "val": c.value, "suit": c.suit})
             elif action == "pass" and self.game_phase == "playing":
                 sorted_ids = sorted(list(self.players.keys()))
@@ -615,6 +622,9 @@ class BlackjackScene(BaseScene):
             elif action == "player_left":
                 self.players.pop(msg_obj["id"], None)
                 self.money.pop(msg_obj["id"], None)
+                self.results.pop(msg_obj["id"], None)
+                self.player_titles.pop(msg_obj["id"], None)
+                self.player_nicknames.pop(msg_obj["id"], None)
             elif action == "pity_money":
                 self.money[msg_obj["id"]] = 2500
                 if msg_obj["id"] == self.engine.my_id:
@@ -671,7 +681,7 @@ class BlackjackScene(BaseScene):
                         end_y = int(self.engine.HEIGHT - sc(250))
                     else:
                         end_y = int(sc(150))
-                    self._deal_animated(c, end_x, end_y, lambda card=c, pid=target: [Assets.sounds['card'].play(), self.players[pid].take_card(card)])
+                    self._deal_animated(c, end_x, end_y, lambda card=c, pid=target: [Assets.sounds['card'].play(), self.players[pid].take_card(card) if pid in self.players else None])
             elif action == "reveal":
                 self.dealer_hidden = False
             elif action == "phase":
@@ -845,7 +855,7 @@ class BlackjackScene(BaseScene):
                     draw_text_centered(window, t("Waiting for players..."), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (int(self.cx - sc(250)), int(self.cy - sc(30)), int(sc(500)), int(sc(60))))
                 elif self.engine.my_id not in self.ready_to_play:
                     if self.players[self.engine.my_id].get_bet().get_value() == 0:
-                        draw_alpha_rect(window, (0, 0, 0, 160), (int(self.cx - sc(200)), int(self.cy - sc(30)), int(sc(400)), int(sc(60))), (218, 165, 32), int(sc(2)), int(sc(15)))
+                        draw_alpha_rect(window, (0, 0, 0, 160), (int(self.cx - sc(200)), int(self.cy - sc(30)), int(sc(400)), int(sc(70))), (218, 165, 32), int(sc(2)), int(sc(15)))
                         draw_text_centered(window, t("Choose your bet!"), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (int(self.cx - sc(200)), int(self.cy - sc(30)), int(sc(400)), int(sc(60))))
 
                     window.blit(Assets.images['all_chips'], self.mountain_pos)

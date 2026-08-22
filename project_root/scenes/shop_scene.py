@@ -227,6 +227,11 @@ class ShopScene(BaseScene):
         draw_alpha_rect(window, (0, 0, 0, 180), (0, 0, self.engine.WIDTH, self.engine.HEIGHT), (0, 0, 0), 0, 0)
         draw_text_centered(window, t("Luck Shop"), Assets.fonts['f150'], (255, 215, 0), (0, 0, 0), (self.cx, int(sc(80)), 0, 0), int(sc(5)))
 
+        first_carousel_y = int(self.engine.HEIGHT * 0.35)
+        hint_y = first_carousel_y - self.item_h // 2 - int(sc(40))
+        hint_x = self.cx - self.spacing
+        draw_text_centered(window, t("Hold LMB and drag to scroll"), Assets.fonts['text30'], (180, 180, 180), (0, 0, 0), (hint_x, hint_y, 0, 0), int(sc(2)))
+
         for key, data in self.carousels.items():
             items = data["items"]
             if not items: continue
@@ -322,7 +327,6 @@ class ShopScene(BaseScene):
                     popup_surf.blit(theme_scaled, (0, 0), pygame.Rect(crop_x, crop_y, self.popup_rect.width, self.popup_rect.height), special_flags=pygame.BLEND_RGBA_MIN)
 
                 window.blit(popup_surf, self.popup_rect.topleft)
-
 
                 if skin_name == "Golden":
                     description_lines = [

@@ -179,6 +179,8 @@ class PokerScene(BaseScene):
 
         self.players.clear()
         self.money.clear()
+        self.player_titles.clear()
+        self.player_nicknames.clear()
 
         if self.mode in ["singleplayer", "multiplayer_host"]:
             self.engine.my_id = 0
@@ -250,8 +252,8 @@ class PokerScene(BaseScene):
         if self.mode == "singleplayer":
             broke = [pid for pid in self.players if self.money[pid] < 100 and pid != self.engine.my_id]
             for b in broke:
-                del self.players[b]
-                self.active_players.remove(b)
+                self.players.pop(b, None)
+                self.active_players.discard(b)
 
     def get_title_color(self, title):
         if title in ["Разработчик", "Developer", "Millionaire", "Миллионер", "Крути-вези!", "I got lucky!"]:
@@ -295,6 +297,7 @@ class PokerScene(BaseScene):
                 self._deal_to_player(c, pid)
 
     def _deal_to_player(self, card, pid):
+        if pid not in self.players: return
         if getattr(self.engine, 'server', None):
             self.engine.server.broadcast({"action": "deal_player", "target": pid, "val": card.value, "suit": card.suit})
 
@@ -315,7 +318,7 @@ class PokerScene(BaseScene):
 
         img = shirt if pid != self.engine.my_id else self._get_cached_texture(card.get_texture_path(), (self.card_w, self.card_h))
 
-        self.animator.add(img, self.deck_pos, (end_x, end_y), lambda c=card, p=pid: [Assets.sounds['card'].play(), self.players[p].take_card(c)], 15, end_angle=angle)
+        self.animator.add(img, self.deck_pos, (end_x, end_y), lambda c=card, p=pid: [Assets.sounds['card'].play(), self.players[p].take_card(c) if p in self.players else None], 15, end_angle=angle)
 
     def _deal_community(self, count):
         for _ in range(count):
@@ -337,9 +340,14 @@ class PokerScene(BaseScene):
         end_x = int(start_x + idx * sc(145)) + offset_x
         end_y = self.cy - sc(80) + offset_y
 
+        def _append_community(card):
+            Assets.sounds['card'].play()
+            if not any(c_in.value == card.value and c_in.suit == card.suit for c_in in self.community_cards):
+                self.community_cards.append(card)
+
         self.animator.add(self._get_cached_texture(c.get_texture_path(), (self.card_w, self.card_h)),
                           self.deck_pos, (end_x, end_y),
-                          lambda card=c: [Assets.sounds['card'].play(), self.community_cards.append(card)], 15, end_angle=angle)
+                          lambda card=c: _append_community(card), 15, end_angle=angle)
 
     def _sync_state(self):
         if getattr(self.engine, 'server', None):
@@ -358,7 +366,7 @@ class PokerScene(BaseScene):
 
     def _place_bet(self, pid, amount):
         real_amount = min(amount, self.money[pid])
-        if real_amount <= 0: return
+        if real_amount < 0: return
 
         self.money[pid] -= real_amount
         self.round_bets[pid] = self.round_bets.get(pid, 0) + real_amount
@@ -580,12 +588,34 @@ class PokerScene(BaseScene):
                 self.engine.server.broadcast({"action": "profiles_sync", "profiles": profiles})
                 continue
             elif action == "internal_player_left":
+                pids_before = list(self.players.keys())
+                was_turn = (pids_before and self.current_turn_idx < len(pids_before) and pids_before[self.current_turn_idx] == cid)
+
                 self.players.pop(cid, None)
                 self.money.pop(cid, None)
                 if cid in self.active_players:
                     self.active_players.remove(cid)
                 self.acted_players.discard(cid)
                 self.ready_to_play.discard(cid)
+                self.player_titles.pop(cid, None)
+                self.player_nicknames.pop(cid, None)
+
+                pids_after = list(self.players.keys())
+                if pids_after:
+                    self.dealer_idx = self.dealer_idx % len(pids_after)
+
+                if self.game_phase in ["preflop", "flop", "turn", "river"]:
+                    if was_turn:
+                        self.current_turn_idx -= 1
+                        if self.current_turn_idx < 0:
+                            self.current_turn_idx = len(pids_after) - 1 if pids_after else 0
+                        if pids_after:
+                            self._next_turn()
+                    else:
+                        if pids_before and self.current_turn_idx < len(pids_before):
+                            curr_id = pids_before[self.current_turn_idx]
+                            if curr_id in pids_after:
+                                self.current_turn_idx = pids_after.index(curr_id)
                 continue
 
             pids = list(self.players.keys())
@@ -643,6 +673,8 @@ class PokerScene(BaseScene):
                 self.money.pop(msg_obj["id"], None)
                 if msg_obj["id"] in self.active_players:
                     self.active_players.remove(msg_obj["id"])
+                self.player_titles.pop(msg_obj["id"], None)
+                self.player_nicknames.pop(msg_obj["id"], None)
             elif action == "deal_player":
                 target = msg_obj["target"]
                 c = Card(msg_obj["val"], msg_obj["suit"])
@@ -678,7 +710,7 @@ class PokerScene(BaseScene):
 
         emoji_btn_rect = pygame.Rect(int(px_my - sc(150) - self.emoji_btn_size - sc(15)), int(info_y_my + sc(20)), self.emoji_btn_size, self.emoji_btn_size)
         reset_rect = pygame.Rect(int(self.mountain_pos[0] + sc(90)), int(self.mountain_pos[1] - sc(160)), int(sc(300)), int(sc(40)))
-        
+
         panel_w, panel_h = int(sc(350)), int(sc(180))
         btn_y = int(self.engine.HEIGHT - sc(120))
         panel_x = int(self.engine.WIDTH - sc(400) - panel_w // 2)
@@ -777,7 +809,7 @@ class PokerScene(BaseScene):
                     elif self.set_bet_250.rect.collidepoint(mx, my): bet_val = 250
                     elif self.set_bet_100.rect.collidepoint(mx, my): bet_val = 100
 
-                    if bet_val > 0 and self.money[self.engine.my_id] >= to_call + self.staged_raise + bet_val:
+                    if bet_val > 0 and self.money.get(self.engine.my_id, 0) >= to_call + self.staged_raise + bet_val:
                         if self.staged_raise + bet_val <= 100000:
                             Assets.sounds['chip'].play()
                             self.staged_raise += bet_val
@@ -927,7 +959,7 @@ class PokerScene(BaseScene):
             p_title = self.player_titles.get(pid, "Шулер")
 
             draw_text_centered(window, f"[{t(p_title)}]", Assets.fonts['text30'], self.get_title_color(p_title), (0,0,0), (int(px - sc(150)), int(info_y + sc(10)), int(sc(300)), int(sc(30))), int(sc(2)))
-            draw_text_centered(window, f"{name}: {self.money[pid]}$", Assets.fonts['text30'], (255,255,255), (0,0,0), (int(px - sc(150)), int(info_y + sc(50)), int(sc(300)), int(sc(30))))
+            draw_text_centered(window, f"{name}: {self.money.get(pid, 0)}$", Assets.fonts['text30'], (255,255,255), (0,0,0), (int(px - sc(150)), int(info_y + sc(50)), int(sc(300)), int(sc(30))))
             draw_text_centered(window, f"{t('Bet:')} {self.round_bets.get(pid, 0)}", Assets.fonts['text30'], (255,255,255), (0,0,0), (int(px - sc(150)), int(info_y + sc(90)), int(sc(300)), int(sc(30))))
 
             if pids and pid == pids[self.dealer_idx]:
