@@ -1,28 +1,29 @@
-# Velaris
+# 🎨 Velaris — Resource & Texture Branch
 
-Welcome to **Velaris** — your personal portable "casino hub"! This is a project combining classic card games and a deep customization system. 
-Here you will find all the versions that I have ever released!
+Welcome to the asset branch of the **Velaris** game project! All graphical and audio materials for the project are uploaded here.
 
-## 🎮 Game Modes
-*   **Blackjack**
-*   **Durak**
-*   **Poker**
+---
 
-## 🛠 Key Features
-*   **Online game:** Game support both over a local network and online.
-*   **Skin Store:** Earn in-game currency and spend it to buy new skins.
-*   **The title system:** Complete tasks, buy or knock out rare titles in the slot machine so that they are displayed above your player.
-*   **Social interaction:** Communicate with your opponents by sending emoticons right during the game.
-*   **Flexible customization:** Huge possibilities for customizing the design themes.
+## 📌 Main Technical Rules
 
-## 🎟️ Promo Codes
-Got a secret code? You can redeem special promotional codes right in the game to grab free in-game currency, bonuses, or unique rewards!
-* **VELARIS20** - take 20,000 to the balance!
-* **LUCKY3** -three free spins!
-* **P9D3K6W1** - take 10,000 to the balance!
+1. **Graphics format:** strictly `.png` with transparency support (Alpha channel).
+2. **File naming:**
+   * Only lowercase English letters, numbers, and underscores `_`.
+   * **No spaces or Cyrillic characters** in filenames (e.g., use `bg_gold.png`, not `фон золото.png`).
+3. **Resolution and proportions:** preserve the original dimensions of the files you are replacing to avoid breaking scaling in Pygame.
 
-## ⚙️ Settings
-You can customize the game for yourself through the settings menu.:
-*   **Sound:** Separate volume control for music and sound effects.
-*   **Visualization:** Adjust brightness and enable/disable vertical synchronization (V-Sync).
-*   **Interface:** Change the language (RU/EN) and install a nickname.
+---
+
+## 📁 Folder Structure
+
+| Folder | What to upload here | Suggested requirements |
+| :--- | :--- | :--- |
+| `authors/` | Developer avatars and artwork | Square PNGs, transparent background |
+| `backgrounds/` | Backgrounds for the main menu and tables | 1920x1080 (or 16:9), `.png` / `.jpg` |
+| `cards/` | Card faces and backs | Cards in fixed proportions by suit/rank |
+| `chips/` | Betting chips (`100`, `250`, `500`, `1000`, `2500`, `10000`) | Transparent background, `.png` format |
+| `companions/` | Character sprites (Leia and Muza) | High resolution, transparent background |
+| `cursors/` | In‑game mouse cursors | `.png` |
+| `emotions/` | Emoji and reaction icons for chat | Transparent background |
+| `different/` | Logos, button icons, UI elements | `.png` with transparency |
+| `sound/` | Sound on/off icons | `.png` with transparency |
