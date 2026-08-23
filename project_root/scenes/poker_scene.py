@@ -296,6 +296,12 @@ class PokerScene(BaseScene):
                 c = self.deck.erase(-1)
                 self._deal_to_player(c, pid)
 
+    def _safe_take_card(self, pid, card):
+        if pid in self.players:
+            hand = self.players[pid].get_deck().cards
+            if not any(c.value == card.value and c.suit == card.suit for c in hand):
+                self.players[pid].take_card(card)
+
     def _deal_to_player(self, card, pid):
         if pid not in self.players: return
         if getattr(self.engine, 'server', None):
@@ -318,7 +324,7 @@ class PokerScene(BaseScene):
 
         img = shirt if pid != self.engine.my_id else self._get_cached_texture(card.get_texture_path(), (self.card_w, self.card_h))
 
-        self.animator.add(img, self.deck_pos, (end_x, end_y), lambda c=card, p=pid: [Assets.sounds['card'].play(), self.players[p].take_card(c) if p in self.players else None], 15, end_angle=angle)
+        self.animator.add(img, self.deck_pos, (end_x, end_y), lambda c=card, p=pid: [Assets.sounds['card'].play(), self._safe_take_card(p, c)], 15, end_angle=angle)
 
     def _deal_community(self, count):
         for _ in range(count):
@@ -580,8 +586,8 @@ class PokerScene(BaseScene):
 
     def _handle_server(self):
         while not self.engine.server.message_queue.empty():
-            msg_obj = self.engine.server.message_queue.get()
-            data = msg_obj["data"]
+            msg = self.engine.server.message_queue.get()
+            data = msg["data"]
             action = data.get("action")
             cid = data.get("client_id")
 
@@ -612,7 +618,7 @@ class PokerScene(BaseScene):
                     if was_turn:
                         self.current_turn_idx -= 1
                         if self.current_turn_idx < 0:
-                            self.current_turn_idx = len(pids_after) - 1 if pids_after else 0
+                            self.current_turn_idx = max(0, len(pids_after) - 1)
                         if pids_after:
                             self._next_turn()
                     else:
@@ -620,6 +626,8 @@ class PokerScene(BaseScene):
                             curr_id = pids_before[self.current_turn_idx]
                             if curr_id in pids_after:
                                 self.current_turn_idx = pids_after.index(curr_id)
+                        if pids_after and self._check_round_over():
+                            self._next_phase()
                 self.rebuild_placed_chips()
                 self._sync_state()
                 continue
@@ -638,18 +646,18 @@ class PokerScene(BaseScene):
                 idx = data.get("idx")
                 self._show_emoji(cid, idx)
                 self.engine.server.broadcast({"action": "emoji", "id": cid, "idx": idx})
-            elif action == "fold" and not self.animator.queue and pids and self.current_turn_idx < len(pids) and pids[self.current_turn_idx] == cid and self.game_phase in ["preflop", "flop", "turn", "river"]:
+            elif action == "fold" and pids and self.current_turn_idx < len(pids) and pids[self.current_turn_idx] == cid and self.game_phase in ["preflop", "flop", "turn", "river"]:
                 if cid in self.active_players:
                     self.active_players.remove(cid)
                 self._next_turn()
-            elif action == "call" and not self.animator.queue and pids and self.current_turn_idx < len(pids) and pids[self.current_turn_idx] == cid and self.game_phase in ["preflop", "flop", "turn", "river"]:
+            elif action == "call" and pids and self.current_turn_idx < len(pids) and pids[self.current_turn_idx] == cid and self.game_phase in ["preflop", "flop", "turn", "river"]:
                 to_call = self.current_bet - self.round_bets.get(cid, 0)
                 self._place_bet(cid, to_call)
                 self._next_turn()
-            elif action == "raise" and not self.animator.queue and pids and self.current_turn_idx < len(pids) and pids[self.current_turn_idx] == cid and self.game_phase in ["preflop", "flop", "turn", "river"]:
+            elif action == "raise" and pids and self.current_turn_idx < len(pids) and pids[self.current_turn_idx] == cid and self.game_phase in ["preflop", "flop", "turn", "river"]:
                 amt = data.get("amount", 0)
                 to_call = self.current_bet - self.round_bets.get(cid, 0)
-                if amt >= to_call + self.min_raise or amt == self.money.get(cid, 0):
+                if amt > 0 and (amt >= to_call + self.min_raise or amt == self.money.get(cid, 0)):
                     self._place_bet(cid, amt)
                     self._next_turn()
             elif action == "restart" and self.game_phase == "showdown":
@@ -780,6 +788,15 @@ class PokerScene(BaseScene):
 
                 if can_exit and self.exit_btn.collidepoint(mx, my):
                     Assets.sounds['back'].play()
+                    if getattr(self.engine, 'server', None):
+                        self.engine.server.stop()
+                        self.engine.server = None
+                    if getattr(self.engine, 'client', None):
+                        self.engine.client.disconnect()
+                        self.engine.client = None
+                    if self.engine.my_id in self.money:
+                        self.engine.current_progress["money"] = self.money.get(self.engine.my_id, 0)
+                        save_progress(self.engine.current_progress)
                     self.engine.switch_scene("menu")
                     return
 
@@ -1018,7 +1035,7 @@ class PokerScene(BaseScene):
                 by = ping_y - bh
                 c = p_col if b < p_bars else (100, 100, 100)
                 pygame.draw.rect(window, c, (bx, by, bw, bh))
-            
+
             if pids and pid == pids[self.dealer_idx]:
                 pygame.draw.circle(window, (255,255,255), (int(px - sc(170)), int(info_y + sc(45))), int(sc(15)))
                 draw_text_centered(window, "D", Assets.fonts['text20'], (0,0,0), (0,0,0), (int(px - sc(180)), int(info_y + sc(35)), int(sc(20)), int(sc(20))))

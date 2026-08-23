@@ -4,7 +4,7 @@ import os
 import math
 
 from scenes.base_scene import BaseScene
-from core.models import Player, Deck, Card, Chip
+from core.models import Player, Deck, Card
 from ui.ui import Button
 from ui.animations import Animator
 from utils.utils import sc, load_img, draw_alpha_rect, draw_text_centered
@@ -551,9 +551,9 @@ class BlackjackScene(BaseScene):
                 self.engine.server.broadcast({"action": "profiles_sync", "profiles": profiles})
             elif action == "bet" and self.game_phase == "betting":
                 if cid in self.players:
-                    bet_val = data.get("val")
+                    bet_val = data.get("val", 0)
                     current_bet = self.players[cid].get_bet().get_value()
-                    if self.money.get(cid, 0) >= bet_val and cid not in self.ready_to_play and current_bet + bet_val <= 100000:
+                    if bet_val > 0 and self.money.get(cid, 0) >= bet_val and cid not in self.ready_to_play and current_bet + bet_val <= 100000:
                         Assets.sounds['chip'].play()
                         self.players[cid].get_bet().value += bet_val
                         self.money[cid] -= bet_val
@@ -587,25 +587,23 @@ class BlackjackScene(BaseScene):
                     self.ready_to_play.add(cid)
                     self.engine.server.broadcast({"action": "ready", "id": cid})
             elif action == "get" and self.game_phase == "playing":
-                if not self.animator.queue:
-                    sorted_ids = sorted(list(self.players.keys()))
-                    if self.current_turn_index < len(sorted_ids) and sorted_ids[self.current_turn_index] == cid:
-                        c = self.deck.erase(random.randint(0, len(self.deck) - 1))
-                        p_len = len(self.players[cid].get_deck()) + 1
-                        px = self.get_player_center(cid)
-                        end_x = int(px - (self.card_w + (p_len - 1) * sc(40)) // 2 + (p_len - 1) * sc(40))
-                        if cid == self.engine.my_id:
-                            end_y = int(self.engine.HEIGHT - sc(250))
-                        else:
-                            end_y = int(sc(150))
-                        self._deal_animated(c, end_x, end_y, lambda card=c, pid=cid: [Assets.sounds['card'].play(), self.players[pid].take_card(card) if pid in self.players else None])
-                        self.engine.server.broadcast({"action": "deal", "target": cid, "val": c.value, "suit": c.suit})
+                sorted_ids = sorted(list(self.players.keys()))
+                if self.current_turn_index < len(sorted_ids) and sorted_ids[self.current_turn_index] == cid:
+                    c = self.deck.erase(random.randint(0, len(self.deck) - 1))
+                    p_len = len(self.players[cid].get_deck()) + 1
+                    px = self.get_player_center(cid)
+                    end_x = int(px - (self.card_w + (p_len - 1) * sc(40)) // 2 + (p_len - 1) * sc(40))
+                    if cid == self.engine.my_id:
+                        end_y = int(self.engine.HEIGHT - sc(250))
+                    else:
+                        end_y = int(sc(150))
+                    self._deal_animated(c, end_x, end_y, lambda card=c, pid=cid: [Assets.sounds['card'].play(), self.players[pid].take_card(card) if pid in self.players else None])
+                    self.engine.server.broadcast({"action": "deal", "target": cid, "val": c.value, "suit": c.suit})
             elif action == "pass" and self.game_phase == "playing":
-                if not self.animator.queue:
-                    sorted_ids = sorted(list(self.players.keys()))
-                    if self.current_turn_index < len(sorted_ids) and sorted_ids[self.current_turn_index] == cid:
-                        self.current_turn_index += 1
-                        self.engine.server.broadcast({"action": "phase", "phase": "playing", "turn": self.current_turn_index})
+                sorted_ids = sorted(list(self.players.keys()))
+                if self.current_turn_index < len(sorted_ids) and sorted_ids[self.current_turn_index] == cid:
+                    self.current_turn_index += 1
+                    self.engine.server.broadcast({"action": "phase", "phase": "playing", "turn": self.current_turn_index})
             elif action == "restart" and self.game_phase == "game_over":
                 self.ready_to_play.add(cid)
                 self.engine.server.broadcast({"action": "ready", "id": cid})
@@ -786,10 +784,10 @@ class BlackjackScene(BaseScene):
                 p_col, p_bars = (255, 165, 0), 2
             else:
                 p_col, p_bars = (255, 0, 0), 1
-                
+
             ping_x = int(px + sc(110))
             ping_y = int(text_y + sc(35))
-            
+
             for b in range(4):
                 bw = int(sc(4))
                 bh = int(sc(6 + b * 4))
@@ -797,7 +795,7 @@ class BlackjackScene(BaseScene):
                 by = ping_y - bh
                 c = p_col if b < p_bars else (100, 100, 100)
                 pygame.draw.rect(window, c, (bx, by, bw, bh))
-                
+
             p_val = p.check_value_in_hand()
             if p_len > 0:
                 val_y = int(self.engine.HEIGHT - sc(420)) if pid == self.engine.my_id else int(sc(40))

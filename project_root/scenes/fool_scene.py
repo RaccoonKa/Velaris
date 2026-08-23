@@ -166,6 +166,12 @@ class FoolScene(BaseScene):
 
         self.animator.add(img=img, start_pos=self.deck_pos, end_pos=(target_x, target_y), on_finish=on_finish, frames=15, start_angle=start_angle, end_angle=angle)
 
+    def _safe_take_card(self, pid, card):
+        if pid in self.players:
+            hand = self.players[pid].get_deck().cards
+            if not any(c.value == card.value and c.suit == card.suit for c in hand):
+                self.players[pid].take_card(card)
+
     def on_enter(self, mode="singleplayer"):
         self.mode = mode
         self.engine.switch_music(self.engine.current_theme, "game")
@@ -220,6 +226,7 @@ class FoolScene(BaseScene):
             self.player_nicknames.clear()
 
     def start_game(self):
+        self.ready_to_play.clear()
         self.deck.clear_deck()
         for suit in ["clubs", "diamonds", "hearts", "spades"]:
             for val in [6, 7, 8, 9, 10, 11, 12, 13, 1]:
@@ -303,7 +310,7 @@ class FoolScene(BaseScene):
             if self.mode == "multiplayer_host" and self.engine.server:
                 self.engine.server.broadcast({"action": "deal_anim", "target": target, "val": c.value, "suit": c.suit})
             px, py = self.get_player_hand_pos(target)
-            self._deal_animated(c, px, py, lambda card=c, pid=target: [Assets.sounds['card'].play(), self.players[pid].take_card(card) if pid in self.players else None, self.deal_next_card()])
+            self._deal_animated(c, px, py, lambda card=c, pid=target: [Assets.sounds['card'].play(), self._safe_take_card(pid, card), self.deal_next_card()])
 
     def get_player_hand_pos(self, pid):
         if pid == self.engine.my_id:
@@ -890,7 +897,7 @@ class FoolScene(BaseScene):
                 by = ping_y - bh
                 c = p_col if b < p_bars else (100, 100, 100)
                 pygame.draw.rect(window, c, (bx, by, bw, bh))
-            
+
             if pid == self.engine.my_id:
                 card_spacing = min(sc(40), sc(320) / max(1, len(hand)))
                 shift_x = max(0, (len(hand) - 6) * sc(18))
@@ -1115,9 +1122,9 @@ class FoolScene(BaseScene):
                 self.engine.server.broadcast({"action": "profiles_sync", "profiles": profiles})
             elif action == "bet" and self.game_phase == "betting":
                 if cid in self.players:
-                    parsed_val = data.get("val")
+                    parsed_val = data.get("val", 0)
                     current_bet = self.players[cid].get_bet().get_value()
-                    if self.money.get(cid, 0) >= parsed_val and cid not in self.ready_to_play and current_bet + parsed_val <= 100000:
+                    if parsed_val > 0 and self.money.get(cid, 0) >= parsed_val and cid not in self.ready_to_play and current_bet + parsed_val <= 100000:
                         Assets.sounds['chip'].play()
                         self.players[cid].get_bet().value += parsed_val
                         self.money[cid] -= parsed_val
@@ -1151,7 +1158,7 @@ class FoolScene(BaseScene):
                     self.ready_to_play.add(cid)
                     self.engine.server.broadcast({"action": "ready", "id": cid})
             elif action == "play_card":
-                if not self.animator.queue and cid in self.players and self.current_turn_pid == cid and self.game_phase in ["attack", "take_add"]:
+                if cid in self.players and self.current_turn_pid == cid and self.game_phase in ["attack", "take_add"]:
                     c = next((card for card in self.players[cid].get_deck().cards if card.value == data['val'] and card.suit == data['suit']), None)
                     if c:
                         valid = self.get_valid_attack_cards(self.players[cid].get_deck().cards)
@@ -1161,7 +1168,7 @@ class FoolScene(BaseScene):
                         if c in valid and len(self.table_cards) < max_attacks:
                             self.action_play_card(cid, c)
             elif action == "beat_card":
-                if not self.animator.queue and cid in self.players and self.current_turn_pid == cid and self.game_phase == "defend":
+                if cid in self.players and self.current_turn_pid == cid and self.game_phase == "defend":
                     c = next((card for card in self.players[cid].get_deck().cards if card.value == data['val'] and card.suit == data['suit']), None)
                     if c:
                         unbeaten = [p for p in self.table_cards if not p['defend']]
@@ -1171,10 +1178,10 @@ class FoolScene(BaseScene):
                             if c in valid:
                                 self.action_beat_card(cid, c)
             elif action == "pass":
-                if not self.animator.queue and cid in self.players and self.current_turn_pid == cid and self.game_phase in ["attack", "take_add"]:
+                if cid in self.players and self.current_turn_pid == cid and self.game_phase in ["attack", "take_add"]:
                     self.action_pass(cid)
             elif action == "take":
-                if not self.animator.queue and cid in self.players and self.current_turn_pid == cid and self.game_phase == "defend":
+                if cid in self.players and self.current_turn_pid == cid and self.game_phase == "defend":
                     self.action_take(cid)
             elif action == "restart":
                 self.ready_to_play.add(cid)
@@ -1232,7 +1239,7 @@ class FoolScene(BaseScene):
                     if self.deck.cards:
                         self.deck.erase(-1)
                     px, py = self.get_player_hand_pos(target)
-                    self._deal_animated(c, px, py, lambda card=c, pid=target: [Assets.sounds['card'].play(), self.players[pid].take_card(card) if pid in self.players else None])
+                    self._deal_animated(c, px, py, lambda card=c, pid=target: [Assets.sounds['card'].play(), self._safe_take_card(pid, card)])
             elif action == "play_card_anim":
                 pid = msg_obj["pid"]
                 if pid not in self.players: continue
