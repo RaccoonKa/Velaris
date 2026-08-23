@@ -2,6 +2,7 @@ import socket
 import threading
 import json
 import queue
+import time
 
 class GameServer:
     def __init__(self, host='0.0.0.0', port=5555, target_players=2):
@@ -14,6 +15,7 @@ class GameServer:
         self.message_queue = queue.Queue()
         self.next_id = 1
         self.target_players = target_players
+        self.pings = {0: 0}
 
     def start(self):
         try:
@@ -68,8 +70,16 @@ class GameServer:
                     msg, buffer = buffer.split('\n', 1)
                     if msg.strip():
                         parsed = json.loads(msg)
-                        parsed["client_id"] = client_id
-                        self.message_queue.put({"connection": conn, "data": parsed})
+                        action = parsed.get("action")
+
+                        if action == "ping_req":
+                            self.send_to_client(client_id, {"action": "ping_res", "client_time": parsed.get("client_time")})
+                        elif action == "update_ping":
+                            self.pings[client_id] = parsed.get("ping")
+                            self.broadcast({"action": "sync_ping", "id": client_id, "ping": parsed.get("ping")})
+                        else:
+                            parsed["client_id"] = client_id
+                            self.message_queue.put({"connection": conn, "data": parsed})
             except (OSError, ConnectionResetError):
                 break
             except (json.JSONDecodeError, UnicodeDecodeError):
@@ -78,10 +88,21 @@ class GameServer:
         self.message_queue.put({"connection": conn, "data": {"action": "internal_player_left", "client_id": client_id}})
         self.clients = [c for c in self.clients if c["id"] != client_id]
         self.broadcast({"action": "player_left", "id": client_id})
+        self.pings.pop(client_id, None)
         try:
             conn.close()
         except (OSError, ConnectionResetError):
             pass
+
+    def send_to_client(self, client_id, data_dict):
+        msg = (json.dumps(data_dict) + '\n').encode('utf-8')
+        for c in self.clients:
+            if c["id"] == client_id:
+                try:
+                    c["connection"].sendall(msg)
+                except OSError:
+                    pass
+                break
 
     def broadcast(self, data_dict, exclude=None):
         msg = (json.dumps(data_dict) + '\n').encode('utf-8')
@@ -101,6 +122,12 @@ class GameClient:
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.connected = False
         self.message_queue = queue.Queue()
+        self.pings = {}
+
+    def ping_loop(self):
+        while self.connected:
+            self.send_data({"action": "ping_req", "client_time": int(time.time() * 1000)})
+            time.sleep(2)
 
     def connect(self):
         try:
@@ -109,6 +136,7 @@ class GameClient:
             self.client_socket.settimeout(None)
             self.connected = True
             threading.Thread(target = self.receive_data, daemon = True).start()
+            threading.Thread(target = self.ping_loop, daemon = True).start()
         except Exception as e:
             print(f"Не удалось подключиться: {e}")
             self.connected = False
@@ -133,7 +161,16 @@ class GameClient:
                 while '\n' in buffer:
                     msg, buffer = buffer.split('\n', 1)
                     if msg.strip():
-                        self.message_queue.put(json.loads(msg))
+                        parsed = json.loads(msg)
+                        action = parsed.get("action")
+
+                        if action == "ping_res":
+                            rtt = int(time.time() * 1000) - parsed.get("client_time")
+                            self.send_data({"action": "update_ping", "ping": rtt // 2})
+                        elif action == "sync_ping":
+                            self.pings[parsed.get("id")] = parsed.get("ping")
+                        else:
+                            self.message_queue.put(parsed)
             except (OSError, ConnectionResetError):
                 break
             except (json.JSONDecodeError, UnicodeDecodeError):

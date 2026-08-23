@@ -541,9 +541,6 @@ class MenuScene(BaseScene):
                         else:
                             self._draw_overlay_message(t("Connection error"), self.engine.WINDOW)
                             pygame.time.wait(3000)
-                    else:
-                        if len(self.ip_text) < 15 and event.unicode in "0123456789.":
-                            self.ip_text += event.unicode
                 elif self.showSettings and getattr(self, "showBonusInput", False):
                     if event.key == pygame.K_ESCAPE:
                         pygame.key.stop_text_input()
@@ -553,9 +550,6 @@ class MenuScene(BaseScene):
                     elif event.key == pygame.K_RETURN:
                         pygame.key.stop_text_input()
                         Assets.sounds['enter'].play(); self._check_bonus_code()
-                    else:
-                        if len(self.bonus_text) < 10 and event.unicode.upper() in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789":
-                            self.bonus_text += event.unicode.upper()
                 elif self.showSettings and self.settings_tab == "general" and self.nickname_input_active:
                     if event.key == pygame.K_BACKSPACE:
                         self.engine.nickname_text = self.engine.nickname_text[:-1]
@@ -565,9 +559,6 @@ class MenuScene(BaseScene):
                         self.nickname_input_active = False
                         self.engine.current_settings["nickname"] = self.engine.nickname_text
                         save_settings(self.engine.current_settings)
-                    else:
-                        if len(self.engine.nickname_text) < 15 and event.unicode.isprintable():
-                            self.engine.nickname_text += event.unicode
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 in_submenu = (self.showPlay or self.showSettings or self.showAuthors or

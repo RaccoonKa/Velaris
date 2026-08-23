@@ -269,8 +269,8 @@ class PokerScene(BaseScene):
 
         self.deck.refill_random(52)
 
-        self.dealer_idx = (self.dealer_idx + 1) % len(self.players)
-        pids = list(self.players.keys())
+        pids = sorted(list(self.players.keys()))
+        self.dealer_idx = (self.dealer_idx + 1) % len(pids)
 
         sb_idx = (self.dealer_idx + 1) % len(pids)
         bb_idx = (self.dealer_idx + 2) % len(pids)
@@ -360,7 +360,9 @@ class PokerScene(BaseScene):
                 "active_players": list(self.active_players),
                 "current_turn_idx": self.current_turn_idx,
                 "game_phase": self.game_phase,
-                "dealer_idx": self.dealer_idx
+                "dealer_idx": self.dealer_idx,
+                "community_cards": [{"val": c.value, "suit": c.suit} for c in self.community_cards],
+                "hands": {pid: [{"val": c.value, "suit": c.suit} for c in p.get_deck().cards] for pid, p in self.players.items()}
             }
             self.engine.server.broadcast(data)
 
@@ -419,7 +421,7 @@ class PokerScene(BaseScene):
             self._next_phase()
             return
 
-        pids = list(self.players.keys())
+        pids = sorted(list(self.players.keys()))
         original_idx = self.current_turn_idx
 
         while True:
@@ -525,13 +527,14 @@ class PokerScene(BaseScene):
         elif self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
             self._handle_client()
 
-        if self.game_phase == "dealing" and not self.animator.queue:
-            self.game_phase = "preflop"
-            self._next_turn()
-
-        elif self.game_phase in ["flop", "turn", "river"] and not self.animator.queue:
-            if self.current_turn_idx == self.dealer_idx and len(self.acted_players) == 0:
+        if self.mode != "multiplayer_client":
+            if self.game_phase == "dealing" and not self.animator.queue:
+                self.game_phase = "preflop"
                 self._next_turn()
+
+            elif self.game_phase in ["flop", "turn", "river"] and not self.animator.queue:
+                if self.current_turn_idx == self.dealer_idx and len(self.acted_players) == 0:
+                    self._next_turn()
 
         if self.game_phase in ["preflop", "flop", "turn", "river"] and not self.animator.queue:
             if self.mode == "singleplayer" and not self._is_my_turn():
@@ -544,12 +547,12 @@ class PokerScene(BaseScene):
                 self.bot_timer = 0
 
     def _is_my_turn(self):
-        pids = list(self.players.keys())
+        pids = sorted(list(self.players.keys()))
         if not pids: return False
         return pids[self.current_turn_idx] == self.engine.my_id
 
     def _handle_bot_turn(self):
-        pids = list(self.players.keys())
+        pids = sorted(list(self.players.keys()))
         bot_id = pids[self.current_turn_idx]
 
         if bot_id not in self.active_players or self.money[bot_id] == 0:
@@ -586,9 +589,10 @@ class PokerScene(BaseScene):
                 self.init_player(cid)
                 profiles = {p: {"title": self.player_titles.get(p, "Новичок"), "nickname": self.player_nicknames.get(p, f"Player {p+1}")} for p in self.players}
                 self.engine.server.broadcast({"action": "profiles_sync", "profiles": profiles})
+                self._sync_state()
                 continue
             elif action == "internal_player_left":
-                pids_before = list(self.players.keys())
+                pids_before = sorted(list(self.players.keys()))
                 was_turn = (pids_before and self.current_turn_idx < len(pids_before) and pids_before[self.current_turn_idx] == cid)
 
                 self.players.pop(cid, None)
@@ -600,7 +604,7 @@ class PokerScene(BaseScene):
                 self.player_titles.pop(cid, None)
                 self.player_nicknames.pop(cid, None)
 
-                pids_after = list(self.players.keys())
+                pids_after = sorted(list(self.players.keys()))
                 if pids_after:
                     self.dealer_idx = self.dealer_idx % len(pids_after)
 
@@ -616,31 +620,38 @@ class PokerScene(BaseScene):
                             curr_id = pids_before[self.current_turn_idx]
                             if curr_id in pids_after:
                                 self.current_turn_idx = pids_after.index(curr_id)
+                self.rebuild_placed_chips()
+                self._sync_state()
                 continue
 
-            pids = list(self.players.keys())
+            pids = sorted(list(self.players.keys()))
 
             if action == "set_profile":
                 self.player_titles[cid] = data.get("title", "Новичок")
                 self.player_nicknames[cid] = data.get("nickname", "Player")
+                if "money" in data:
+                    self.money[cid] = data["money"]
                 profiles = {p: {"title": self.player_titles.get(p, "Новичок"), "nickname": self.player_nicknames.get(p, f"Player {p+1}")} for p in self.players}
                 self.engine.server.broadcast({"action": "profiles_sync", "profiles": profiles})
+                self._sync_state()
             elif action == "emoji":
                 idx = data.get("idx")
                 self._show_emoji(cid, idx)
                 self.engine.server.broadcast({"action": "emoji", "id": cid, "idx": idx})
-            elif action == "fold" and pids and self.current_turn_idx < len(pids) and pids[self.current_turn_idx] == cid:
+            elif action == "fold" and not self.animator.queue and pids and self.current_turn_idx < len(pids) and pids[self.current_turn_idx] == cid and self.game_phase in ["preflop", "flop", "turn", "river"]:
                 if cid in self.active_players:
                     self.active_players.remove(cid)
                 self._next_turn()
-            elif action == "call" and pids and self.current_turn_idx < len(pids) and pids[self.current_turn_idx] == cid:
+            elif action == "call" and not self.animator.queue and pids and self.current_turn_idx < len(pids) and pids[self.current_turn_idx] == cid and self.game_phase in ["preflop", "flop", "turn", "river"]:
                 to_call = self.current_bet - self.round_bets.get(cid, 0)
                 self._place_bet(cid, to_call)
                 self._next_turn()
-            elif action == "raise" and pids and self.current_turn_idx < len(pids) and pids[self.current_turn_idx] == cid:
+            elif action == "raise" and not self.animator.queue and pids and self.current_turn_idx < len(pids) and pids[self.current_turn_idx] == cid and self.game_phase in ["preflop", "flop", "turn", "river"]:
                 amt = data.get("amount", 0)
-                self._place_bet(cid, amt)
-                self._next_turn()
+                to_call = self.current_bet - self.round_bets.get(cid, 0)
+                if amt >= to_call + self.min_raise or amt == self.money.get(cid, 0):
+                    self._place_bet(cid, amt)
+                    self._next_turn()
             elif action == "restart" and self.game_phase == "showdown":
                 self.ready_to_play.add(cid)
                 self.engine.server.broadcast({"action": "ready", "id": cid})
@@ -657,7 +668,7 @@ class PokerScene(BaseScene):
                 self.money.clear()
                 for pid in msg_obj["players"]: self.init_player(pid)
                 self.init_player(self.engine.my_id)
-                self.engine.client.send_data({"action": "set_profile", "title": self.engine.current_progress.get("current_title", "Новичок"), "nickname": getattr(self.engine, "nickname_text", "Player")})
+                self.engine.client.send_data({"action": "set_profile", "title": self.engine.current_progress.get("current_title", "Новичок"), "nickname": getattr(self.engine, "nickname_text", "Player"), "money": self.engine.current_progress.get("money", 10000)})
             elif action == "profiles_sync":
                 for p_key, prof in msg_obj.get("profiles", {}).items():
                     try:
@@ -675,6 +686,7 @@ class PokerScene(BaseScene):
                     self.active_players.remove(msg_obj["id"])
                 self.player_titles.pop(msg_obj["id"], None)
                 self.player_nicknames.pop(msg_obj["id"], None)
+                self.rebuild_placed_chips()
             elif action == "deal_player":
                 target = msg_obj["target"]
                 c = Card(msg_obj["val"], msg_obj["suit"])
@@ -691,11 +703,25 @@ class PokerScene(BaseScene):
                 self.current_turn_idx = msg_obj["current_turn_idx"]
                 self.game_phase = msg_obj["game_phase"]
                 self.dealer_idx = msg_obj["dealer_idx"]
+
+                if "community_cards" in msg_obj:
+                    self.community_cards = [Card(c["val"], c["suit"]) for c in msg_obj["community_cards"]]
+                if "hands" in msg_obj:
+                    for pid_str, cards in msg_obj["hands"].items():
+                        pid = int(pid_str)
+                        if pid in self.players:
+                            self.players[pid].clear_deck()
+                            for c in cards:
+                                self.players[pid].take_card(Card(c["val"], c["suit"]))
+
                 self.rebuild_placed_chips()
             elif action == "showdown_results":
                 self.last_winners = msg_obj["winners"]
                 self.money = {int(k): v for k, v in msg_obj["money"].items()}
                 self.game_phase = "showdown"
+                if self.engine.my_id in self.money:
+                    self.engine.current_progress["money"] = self.money[self.engine.my_id]
+                    save_progress(self.engine.current_progress)
             elif action == "emoji":
                 self._show_emoji(msg_obj["id"], msg_obj["idx"])
             elif action == "ready":
@@ -775,6 +801,8 @@ class PokerScene(BaseScene):
 
                     if self.fold_btn.collidepoint(mx, my):
                         Assets.sounds['enter'].play()
+                        self.staged_raise = 0
+                        self.rebuild_placed_chips()
                         if self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
                             self.engine.client.send_data({"action": "fold"})
                         else:
@@ -784,6 +812,8 @@ class PokerScene(BaseScene):
 
                     elif self.call_btn.collidepoint(mx, my):
                         Assets.sounds['enter'].play()
+                        self.staged_raise = 0
+                        self.rebuild_placed_chips()
                         if self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
                             self.engine.client.send_data({"action": "call"})
                         else:
@@ -793,12 +823,12 @@ class PokerScene(BaseScene):
                     elif self.raise_btn.collidepoint(mx, my) and can_raise:
                         Assets.sounds['enter'].play()
                         total_bet = to_call + self.staged_raise
+                        self.staged_raise = 0
+                        self.rebuild_placed_chips()
                         if self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
                             self.engine.client.send_data({"action": "raise", "amount": total_bet})
-                            self.staged_raise = 0
                         else:
                             self._place_bet(self.engine.my_id, total_bet)
-                            self.staged_raise = 0
                             self._next_turn()
 
                     bet_val = 0
@@ -921,7 +951,7 @@ class PokerScene(BaseScene):
         draw_alpha_rect(window, (0, 0, 0, 160), pot_rect, (218, 165, 32), int(sc(2)), int(sc(15)))
         draw_text_centered(window, f"{t('Pot:')} {self.pot}$", Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), pot_rect)
 
-        pids = list(self.players.keys())
+        pids = sorted(list(self.players.keys()))
         for pid in pids:
             p = self.players[pid]
             px, py = self._get_player_pos(pid)
@@ -934,7 +964,7 @@ class PokerScene(BaseScene):
                     x = int(start_x + i * sc(40)) + vis["offset"][0]
                     y = py + vis["offset"][1]
 
-                    show_face = (pid == self.engine.my_id) or (self.game_phase == "showdown")
+                    show_face = (pid == self.engine.my_id) or (self.game_phase == "showdown" and pid in self.active_players)
                     c_img = self._get_cached_texture(c.get_texture_path(), (self.card_w, self.card_h)) if show_face else shirt
 
                     if vis["angle"] != 0:
@@ -962,6 +992,33 @@ class PokerScene(BaseScene):
             draw_text_centered(window, f"{name}: {self.money.get(pid, 0)}$", Assets.fonts['text30'], (255,255,255), (0,0,0), (int(px - sc(150)), int(info_y + sc(50)), int(sc(300)), int(sc(30))))
             draw_text_centered(window, f"{t('Bet:')} {self.round_bets.get(pid, 0)}", Assets.fonts['text30'], (255,255,255), (0,0,0), (int(px - sc(150)), int(info_y + sc(90)), int(sc(300)), int(sc(30))))
 
+            if getattr(self.engine, 'server', None):
+                ping_val = self.engine.server.pings.get(pid, 0)
+            elif getattr(self.engine, 'client', None):
+                ping_val = self.engine.client.pings.get(pid, 0)
+            else:
+                ping_val = 0
+
+            if ping_val < 50:
+                p_col, p_bars = (0, 255, 0), 4
+            elif ping_val < 150:
+                p_col, p_bars = (173, 255, 47), 3
+            elif ping_val < 300:
+                p_col, p_bars = (255, 165, 0), 2
+            else:
+                p_col, p_bars = (255, 0, 0), 1
+
+            ping_x = int(px + sc(110))
+            ping_y = int(info_y + sc(35))
+
+            for b in range(4):
+                bw = int(sc(4))
+                bh = int(sc(6 + b * 4))
+                bx = ping_x + b * int(sc(6))
+                by = ping_y - bh
+                c = p_col if b < p_bars else (100, 100, 100)
+                pygame.draw.rect(window, c, (bx, by, bw, bh))
+            
             if pids and pid == pids[self.dealer_idx]:
                 pygame.draw.circle(window, (255,255,255), (int(px - sc(170)), int(info_y + sc(45))), int(sc(15)))
                 draw_text_centered(window, "D", Assets.fonts['text20'], (0,0,0), (0,0,0), (int(px - sc(180)), int(info_y + sc(35)), int(sc(20)), int(sc(20))))

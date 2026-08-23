@@ -410,6 +410,7 @@ class BlackjackScene(BaseScene):
                 self.ready_to_play.clear()
                 self.dealer_hidden = True
                 self.deck.fill_in_order(self.start_size)
+                if getattr(self.engine, 'server', None): self.engine.server.broadcast({"action": "phase", "phase": "dealing"})
 
         elif self.game_phase == "dealing" and not self.animator.queue:
             for pid in sorted(list(self.players.keys())):
@@ -495,6 +496,7 @@ class BlackjackScene(BaseScene):
                     save_progress(self.engine.current_progress)
 
                 self.game_phase = "game_over"
+                self.ready_to_play.clear()
                 if getattr(self.engine, 'server', None): self.engine.server.broadcast({"action": "game_over", "results": self.results})
 
         elif self.game_phase == "game_over" and not self.animator.queue:
@@ -521,17 +523,30 @@ class BlackjackScene(BaseScene):
                 self.engine.server.broadcast({"action": "profiles_sync", "profiles": profiles})
                 continue
             elif action == "internal_player_left":
+                old_sorted = sorted(list(self.players.keys()))
+                idx = old_sorted.index(cid) if cid in old_sorted else -1
+
                 self.players.pop(cid, None)
                 self.money.pop(cid, None)
                 self.ready_to_play.discard(cid)
                 self.results.pop(cid, None)
                 self.player_titles.pop(cid, None)
                 self.player_nicknames.pop(cid, None)
+
+                if self.game_phase == "betting":
+                    self.rebuild_placed_chips()
+
+                if self.game_phase == "playing" and idx != -1:
+                    if idx < self.current_turn_index:
+                        self.current_turn_index -= 1
+                    self.engine.server.broadcast({"action": "phase", "phase": "playing", "turn": self.current_turn_index})
                 continue
 
             if action == "set_profile":
                 self.player_titles[cid] = data.get("title", "Новичок")
                 self.player_nicknames[cid] = data.get("nickname", "Player")
+                if "money" in data:
+                    self.money[cid] = data["money"]
                 profiles = {p: {"title": self.player_titles.get(p, "Новичок"), "nickname": self.player_nicknames.get(p, f"Player {p+1}")} for p in self.players}
                 self.engine.server.broadcast({"action": "profiles_sync", "profiles": profiles})
             elif action == "bet" and self.game_phase == "betting":
@@ -572,23 +587,25 @@ class BlackjackScene(BaseScene):
                     self.ready_to_play.add(cid)
                     self.engine.server.broadcast({"action": "ready", "id": cid})
             elif action == "get" and self.game_phase == "playing":
-                sorted_ids = sorted(list(self.players.keys()))
-                if self.current_turn_index < len(sorted_ids) and sorted_ids[self.current_turn_index] == cid:
-                    c = self.deck.erase(random.randint(0, len(self.deck) - 1))
-                    p_len = len(self.players[cid].get_deck()) + 1
-                    px = self.get_player_center(cid)
-                    end_x = int(px - (self.card_w + (p_len - 1) * sc(40)) // 2 + (p_len - 1) * sc(40))
-                    if cid == self.engine.my_id:
-                        end_y = int(self.engine.HEIGHT - sc(250))
-                    else:
-                        end_y = int(sc(150))
-                    self._deal_animated(c, end_x, end_y, lambda card=c, pid=cid: [Assets.sounds['card'].play(), self.players[pid].take_card(card) if pid in self.players else None])
-                    self.engine.server.broadcast({"action": "deal", "target": cid, "val": c.value, "suit": c.suit})
+                if not self.animator.queue:
+                    sorted_ids = sorted(list(self.players.keys()))
+                    if self.current_turn_index < len(sorted_ids) and sorted_ids[self.current_turn_index] == cid:
+                        c = self.deck.erase(random.randint(0, len(self.deck) - 1))
+                        p_len = len(self.players[cid].get_deck()) + 1
+                        px = self.get_player_center(cid)
+                        end_x = int(px - (self.card_w + (p_len - 1) * sc(40)) // 2 + (p_len - 1) * sc(40))
+                        if cid == self.engine.my_id:
+                            end_y = int(self.engine.HEIGHT - sc(250))
+                        else:
+                            end_y = int(sc(150))
+                        self._deal_animated(c, end_x, end_y, lambda card=c, pid=cid: [Assets.sounds['card'].play(), self.players[pid].take_card(card) if pid in self.players else None])
+                        self.engine.server.broadcast({"action": "deal", "target": cid, "val": c.value, "suit": c.suit})
             elif action == "pass" and self.game_phase == "playing":
-                sorted_ids = sorted(list(self.players.keys()))
-                if self.current_turn_index < len(sorted_ids) and sorted_ids[self.current_turn_index] == cid:
-                    self.current_turn_index += 1
-                    self.engine.server.broadcast({"action": "phase", "phase": "playing", "turn": self.current_turn_index})
+                if not self.animator.queue:
+                    sorted_ids = sorted(list(self.players.keys()))
+                    if self.current_turn_index < len(sorted_ids) and sorted_ids[self.current_turn_index] == cid:
+                        self.current_turn_index += 1
+                        self.engine.server.broadcast({"action": "phase", "phase": "playing", "turn": self.current_turn_index})
             elif action == "restart" and self.game_phase == "game_over":
                 self.ready_to_play.add(cid)
                 self.engine.server.broadcast({"action": "ready", "id": cid})
@@ -596,6 +613,10 @@ class BlackjackScene(BaseScene):
                 idx = data.get("idx")
                 self._show_emoji(cid, idx)
                 self.engine.server.broadcast({"action": "emoji", "id": cid, "idx": idx})
+            elif action == "pity_money":
+                if self.money.get(cid, 0) < 100:
+                    self.money[cid] = 2500
+                    self.engine.server.broadcast({"action": "pity_money", "id": cid})
 
     def _handle_client(self):
         while not self.engine.client.message_queue.empty():
@@ -608,7 +629,7 @@ class BlackjackScene(BaseScene):
                 self.players.clear(); self.money.clear(); self.results.clear()
                 for pid in msg_obj["players"]: self.init_player(pid)
                 self.init_player(self.engine.my_id)
-                self.engine.client.send_data({"action": "set_profile", "title": self.engine.current_progress.get("current_title", "Новичок"), "nickname": getattr(self.engine, "nickname_text", "Player")})
+                self.engine.client.send_data({"action": "set_profile", "title": self.engine.current_progress.get("current_title", "Новичок"), "nickname": getattr(self.engine, "nickname_text", "Player"), "money": self.engine.current_progress.get("money", 10000)})
             elif action == "profiles_sync":
                 for p_key, prof in msg_obj.get("profiles", {}).items():
                     try:
@@ -693,6 +714,7 @@ class BlackjackScene(BaseScene):
             elif action == "game_over":
                 self.results = {int(k): v for k, v in msg_obj["results"].items()}
                 self.game_phase = "game_over"
+                self.ready_to_play.clear()
                 if self.engine.my_id in self.results:
                     res = self.results[self.engine.my_id]
                     bet = self.players[self.engine.my_id].get_bet().get_value()
@@ -750,6 +772,32 @@ class BlackjackScene(BaseScene):
             draw_text_centered(window, p_text, Assets.fonts['text30'], (255,255,255), (0,0,0), (int(px - sc(100)), text_y + int(sc(35)), int(sc(200)), int(sc(30))), int(sc(2)))
             draw_text_centered(window, f"{t('Bet:')} {p.get_bet().get_value()}", Assets.fonts['text30'], (255, 255, 255), (0, 0, 0), (int(px - sc(100)), text_y + int(sc(65)), int(sc(200)), int(sc(30))), int(sc(2)))
 
+            if getattr(self.engine, 'server', None):
+                ping_val = self.engine.server.pings.get(pid, 0)
+            elif getattr(self.engine, 'client', None):
+                ping_val = self.engine.client.pings.get(pid, 0)
+            else:
+                ping_val = 0
+            if ping_val < 50:
+                p_col, p_bars = (0, 255, 0), 4
+            elif ping_val < 150:
+                p_col, p_bars = (173, 255, 47), 3
+            elif ping_val < 300:
+                p_col, p_bars = (255, 165, 0), 2
+            else:
+                p_col, p_bars = (255, 0, 0), 1
+                
+            ping_x = int(px + sc(110))
+            ping_y = int(text_y + sc(35))
+            
+            for b in range(4):
+                bw = int(sc(4))
+                bh = int(sc(6 + b * 4))
+                bx = ping_x + b * int(sc(6))
+                by = ping_y - bh
+                c = p_col if b < p_bars else (100, 100, 100)
+                pygame.draw.rect(window, c, (bx, by, bw, bh))
+                
             p_val = p.check_value_in_hand()
             if p_len > 0:
                 val_y = int(self.engine.HEIGHT - sc(420)) if pid == self.engine.my_id else int(sc(40))
