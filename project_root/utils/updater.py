@@ -152,4 +152,4 @@ class GameUpdater:
                 self.status = "error"
                 self.error_message = str(e)
 
-updater = GameUpdater(current_version="v1.2.4", repo_owner="RaccoonKa", repo_name="Velaris")
+updater = GameUpdater(current_version="v1.3.3", repo_owner="RaccoonKa", repo_name="Velaris")
