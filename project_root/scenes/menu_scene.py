@@ -10,11 +10,13 @@ from scenes.base_scene import BaseScene
 from utils.utils import sc, draw_alpha_rect, draw_text_centered, draw_gradient_circle, draw_text
 from resources import save_settings, save_progress, t, set_language, get_language, Assets
 from network.network import GameServer, GameClient
+from utils.updater import updater
 
 class MenuScene(BaseScene):
     def __init__(self, engine):
         super().__init__(engine)
         self.today_date = datetime.now().strftime("%Y-%m-%d")
+        self.help_type_open = None
         self._init_ui()
         self.hovered_button = None
         self.showPlay = False
@@ -72,6 +74,8 @@ class MenuScene(BaseScene):
             self.wheel_sound = pygame.mixer.Sound(os.path.join("sound", "sounds", "wheel.mp3"))
         except:
             self.wheel_sound = None
+
+        updater.check_for_updates_async()
 
     def _build_wheel_pool(self):
         self.wheel_pool = []
@@ -137,6 +141,7 @@ class MenuScene(BaseScene):
         self.exit_btn = pygame.Rect(0, 0, int(sc(350)), int(sc(70))); self.exit_btn.center = (self.cx, int(self.cy + sc(230)))
 
         self.back_btn = pygame.Rect(0, 0, int(sc(320)), int(sc(80))); self.back_btn.bottomright = (int(self.engine.WIDTH - sc(50)), int(self.engine.HEIGHT - sc(50)))
+        self.help_close_btn = pygame.Rect(0, 0, int(sc(200)), int(sc(70)))
 
         self.bj_btn = pygame.Rect(0, 0, int(sc(320)), int(sc(320)))
         self.bj_btn.center = (int(self.cx - sc(450)), self.cy)
@@ -157,6 +162,10 @@ class MenuScene(BaseScene):
 
         self.local_btn_rect = pygame.Rect(0, 0, int(sc(750)), int(sc(120))); self.local_btn_rect.center = (self.cx, int(self.cy - sc(80)))
         self.online_btn_rect = pygame.Rect(0, 0, int(sc(750)), int(sc(120))); self.online_btn_rect.center = (self.cx, int(self.cy + sc(80)))
+
+        self.help_local_btn = pygame.Rect(int(self.cx + sc(395)), int(self.cy - sc(120)), int(sc(80)), int(sc(80)))
+        self.help_online_btn = pygame.Rect(int(self.cx + sc(395)), int(self.cy + sc(40)), int(sc(80)), int(sc(80)))
+
         self.host_btn_rect = pygame.Rect(0, 0, int(sc(750)), int(sc(120))); self.host_btn_rect.center = (self.cx, int(self.cy - sc(80)))
         self.join_btn_rect = pygame.Rect(0, 0, int(sc(750)), int(sc(120))); self.join_btn_rect.center = (self.cx, int(self.cy + sc(80)))
 
@@ -203,6 +212,9 @@ class MenuScene(BaseScene):
         self.title_hint_rect = pygame.Rect(0, 0, int(sc(600)), int(sc(30)))
         self.title_hint_rect.centerx = self.title_display_rect.centerx
         self.title_hint_rect.y = int(self.cy + sc(385))
+
+        self.btn_check_update = pygame.Rect(int(self.slider_bg.left + sc(30)), int(self.cy + sc(420)), int(sc(560)), int(sc(50)))
+        self.update_banner_rect = pygame.Rect(int(self.engine.WIDTH - sc(360)), int(sc(20)), int(sc(340)), int(sc(80)))
 
         self.v_tab_bg = pygame.Rect(0, 0, int(sc(350)), int(sc(70))); self.v_tab_bg.center = (int(self.cx - sc(370)), int(self.engine.HEIGHT * 0.25))
         self.v_tab_comp = pygame.Rect(0, 0, int(sc(350)), int(sc(70))); self.v_tab_comp.center = (self.cx, int(self.engine.HEIGHT * 0.25))
@@ -378,9 +390,14 @@ class MenuScene(BaseScene):
                 ease_out = 1.0 - (1.0 - u) ** 4
                 self.reel_y = self.reel_y_start + (self.reel_y_target - self.reel_y_start) * ease_out
 
-        if not (self.showPlay or self.showSettings or self.showAuthors or self.showGameTypeMenu or self.showHostJoinMenu or self.showHostPlayersMenu or self.showIPInput or getattr(self, "showGameChoice", False)):
+        if getattr(self, "help_type_open", None) is not None:
+            if self.help_close_btn.collidepoint((mx, my)): current_hover = self.help_close_btn
+        elif not (self.showPlay or self.showSettings or self.showAuthors or self.showGameTypeMenu or self.showHostJoinMenu or self.showHostPlayersMenu or self.showIPInput or getattr(self, "showGameChoice", False)):
             for b in [self.play_btn, self.shop_btn, self.set_btn, self.auth_btn, self.exit_btn]:
                 if b.collidepoint((mx, my)): current_hover = b
+
+            if updater.status in ["available", "ready"] and self.update_banner_rect.collidepoint((mx, my)):
+                current_hover = self.update_banner_rect
 
             if self.wheel_state == "idle" and self.spin_btn_rect.collidepoint((mx, my)):
                 free_spins = self.engine.current_progress.get("free_spins", 0)
@@ -395,7 +412,7 @@ class MenuScene(BaseScene):
             for b in [self.mode1_btn, self.mode2_btn, self.back_btn]:
                 if b.collidepoint((mx, my)): current_hover = b
         elif self.showGameTypeMenu:
-            for b in [self.local_btn_rect, self.online_btn_rect, self.back_btn]:
+            for b in [self.local_btn_rect, self.online_btn_rect, self.back_btn, self.help_local_btn, self.help_online_btn]:
                 if b.collidepoint((mx, my)): current_hover = b
         elif self.showHostJoinMenu:
             for b in [self.host_btn_rect, self.join_btn_rect, self.back_btn]:
@@ -417,7 +434,7 @@ class MenuScene(BaseScene):
                 elif self.settings_tab == "general":
                     t_id = self.VISIBLE_TITLES[self.viewing_title_idx]
                     unlocked = t_id in self.engine.current_progress.get("titles_unlocked", ["Новичок"])
-                    btns = [self.btn_mute, self.btn_sfx_mute, self.btn_lang_en, self.btn_lang_ru, self.btn_vsync, self.btn_skip_splash, self.btn_save_nick, self.title_left_btn, self.title_right_btn, self.back_btn]
+                    btns = [self.btn_mute, self.btn_sfx_mute, self.btn_lang_en, self.btn_lang_ru, self.btn_vsync, self.btn_skip_splash, self.btn_save_nick, self.title_left_btn, self.title_right_btn, self.btn_check_update, self.back_btn]
                     if unlocked and t_id != self.engine.current_progress.get("current_title", "Новичок"):
                         btns.append(self.btn_equip_title)
                     for b in btns:
@@ -479,6 +496,8 @@ class MenuScene(BaseScene):
     def _check_bonus_code(self):
         code = self.bonus_text
         redeemed = self.engine.current_progress.get("redeemed_codes", [])
+        success = False
+
         if code in redeemed:
             self.bonus_message = t("Invalid code!")
         elif code == "X7A9BQ2M":
@@ -488,32 +507,61 @@ class MenuScene(BaseScene):
             save_progress(self.engine.current_progress)
             self.bonus_message = t("Code activated!")
             self.update_titles()
+            success = True
         elif code == "P9D3K6W1":
             self.engine.current_progress["money"] = self.engine.current_progress.get("money", 10000) + 10000
             redeemed.append(code)
             self.engine.current_progress["redeemed_codes"] = redeemed
             save_progress(self.engine.current_progress)
             self.bonus_message = t("Code activated!")
+            success = True
         elif code == "VELARIS20":
             self.engine.current_progress["money"] = self.engine.current_progress.get("money", 10000) + 20000
             redeemed.append(code)
             self.engine.current_progress["redeemed_codes"] = redeemed
             save_progress(self.engine.current_progress)
             self.bonus_message = t("Code activated!")
+            success = True
+        elif code == "VELARIS50":
+            self.engine.current_progress["money"] = self.engine.current_progress.get("money", 10000) + 50000
+            redeemed.append(code)
+            self.engine.current_progress["redeemed_codes"] = redeemed
+            save_progress(self.engine.current_progress)
+            self.bonus_message = t("Code activated!")
+            success = True
         elif code == "LUCKY3":
             self.engine.current_progress["free_spins"] = self.engine.current_progress.get("free_spins", 0) + 3
             redeemed.append(code)
             self.engine.current_progress["redeemed_codes"] = redeemed
             save_progress(self.engine.current_progress)
             self.bonus_message = t("Code activated!")
+            success = True
+        elif code == "SPIN2":
+            self.engine.current_progress["free_spins"] = self.engine.current_progress.get("free_spins", 0) + 2
+            redeemed.append(code)
+            self.engine.current_progress["redeemed_codes"] = redeemed
+            save_progress(self.engine.current_progress)
+            self.bonus_message = t("Code activated!")
+            success = True
         else:
             self.bonus_message = t("Invalid code!")
+
         self.bonus_message_timer = pygame.time.get_ticks() + 2000
-        self.bonus_text = ""
+
+        if success:
+            self.bonus_text = ""
+            pygame.key.stop_text_input()
 
     def handle_events(self, events):
         mx, my = self.engine.mx, self.engine.my
         for event in events:
+            if getattr(self, "help_type_open", None) is not None:
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if self.help_close_btn.collidepoint(mx, my):
+                        Assets.sounds['back'].play()
+                        self.help_type_open = None
+                continue
+
             if event.type == pygame.TEXTINPUT:
                 if self.showIPInput:
                     if len(self.ip_text) < 15 and event.text in "0123456789.":
@@ -548,8 +596,8 @@ class MenuScene(BaseScene):
                     elif event.key == pygame.K_BACKSPACE:
                         self.bonus_text = self.bonus_text[:-1]
                     elif event.key == pygame.K_RETURN:
-                        pygame.key.stop_text_input()
-                        Assets.sounds['enter'].play(); self._check_bonus_code()
+                        Assets.sounds['enter'].play()
+                        self._check_bonus_code()
                 elif self.showSettings and self.settings_tab == "general" and self.nickname_input_active:
                     if event.key == pygame.K_BACKSPACE:
                         self.engine.nickname_text = self.engine.nickname_text[:-1]
@@ -593,12 +641,20 @@ class MenuScene(BaseScene):
                             self.settings_tab = "menu"
 
                 elif not in_submenu:
-                    if self.exit_btn.collidepoint(mx, my):
+                    if updater.status == "available" and self.update_banner_rect.collidepoint(mx, my):
+                        Assets.sounds['enter'].play()
+                        self.showSettings = True
+                        self.settings_tab = "general"
+                        updater.download_and_install_async()
+                    elif updater.status == "ready" and self.update_banner_rect.collidepoint(mx, my):
+                        Assets.sounds['enter'].play()
+                        updater.launch_installer_and_exit()
+                    elif self.exit_btn.collidepoint(mx, my):
                         Assets.sounds['enter'].play(); self.engine.running = False
                     elif self.play_btn.collidepoint(mx, my):
                         Assets.sounds['enter'].play(); self.engine.pick_random_emotion(); self.showGameChoice = True
                     elif self.shop_btn.collidepoint(mx, my):
-                        Assets.sounds['enter'].play(); self.engine.pick_random_emotion(); self.engine.switch_scene("shop")
+                        Assets.sounds['enter'].play(); self.engine.pick_random_emotion(); self.switch_scene("shop") if hasattr(self, 'switch_scene') else self.engine.switch_scene("shop")
                     elif self.set_btn.collidepoint(mx, my):
                         Assets.sounds['enter'].play(); self.engine.pick_random_emotion(); self.showSettings = True
                     elif self.auth_btn.collidepoint(mx, my):
@@ -663,6 +719,12 @@ class MenuScene(BaseScene):
                         Assets.sounds['enter'].play(); self.engine.pick_random_emotion(); self.network_mode = "local"; self.showGameTypeMenu = False; self.showHostJoinMenu = True
                     elif self.online_btn_rect.collidepoint(mx, my):
                         Assets.sounds['enter'].play(); self.engine.pick_random_emotion(); self.network_mode = "online"; self.showGameTypeMenu = False; self.showHostJoinMenu = True
+                    elif self.help_local_btn.collidepoint(mx, my):
+                        Assets.sounds['enter'].play()
+                        self.help_type_open = "local"
+                    elif self.help_online_btn.collidepoint(mx, my):
+                        Assets.sounds['enter'].play()
+                        self.help_type_open = "online"
 
                 elif self.showHostJoinMenu:
                     if self.host_btn_rect.collidepoint(mx, my):
@@ -707,11 +769,13 @@ class MenuScene(BaseScene):
                 elif self.showSettings:
                     if getattr(self, "showBonusInput", False):
                         if self.bonus_activate_btn.collidepoint(mx, my):
-                            pygame.key.stop_text_input()
-                            Assets.sounds['enter'].play(); self._check_bonus_code()
+                            Assets.sounds['enter'].play()
+                            self._check_bonus_code()
                         elif self.bonus_back_btn.collidepoint(mx, my):
                             pygame.key.stop_text_input()
                             Assets.sounds['back'].play(); self.showBonusInput = False
+                        elif self.bonus_input_rect.collidepoint(mx, my):
+                            pygame.key.start_text_input()
                     else:
                         if self.settings_tab =="menu":
                             if self.gen_tab_btn.collidepoint(mx, my): Assets.sounds['enter'].play(); self.settings_tab = "general"
@@ -748,6 +812,17 @@ class MenuScene(BaseScene):
                                     Assets.sounds['enter'].play()
                                     self.engine.current_progress["current_title"] = t_id
                                     save_progress(self.engine.current_progress)
+
+                            elif self.btn_check_update.collidepoint(mx, my):
+                                if updater.status in ["idle", "no_update", "error"]:
+                                    Assets.sounds['enter'].play()
+                                    updater.check_for_updates_async()
+                                elif updater.status == "available":
+                                    Assets.sounds['enter'].play()
+                                    updater.download_and_install_async()
+                                elif updater.status == "ready":
+                                    Assets.sounds['enter'].play()
+                                    updater.launch_installer_and_exit()
 
                             elif self.slider_bg.collidepoint(mx, my) or self.slider_thumb.collidepoint(mx, my):
                                 self.music_slider_dragging = True
@@ -846,7 +921,6 @@ class MenuScene(BaseScene):
                                     Assets.sounds['enter'].play(); self.engine.current_companion = "cyberpunk"; self.engine.pick_random_emotion()
                                     self.engine.current_settings["companion"] = self.engine.current_companion; save_settings(self.engine.current_settings)
 
-
                             elif self.visual_sub_tab == "emoji":
                                 for pack_name, rect in self.get_emoji_pack_rects():
                                     if rect.collidepoint(mx, my):
@@ -888,7 +962,11 @@ class MenuScene(BaseScene):
                     self.brightness_slider_thumb.centerx = int(self.brightness_slider_bg.x + slider_x)
 
     def draw(self, window):
-        mx, my = self.engine.mx, self.engine.my
+        real_mx, real_my = self.engine.mx, self.engine.my
+        if getattr(self, "help_type_open", None) is not None:
+            mx, my = -1, -1
+        else:
+            mx, my = real_mx, real_my
         window.blit(self.engine.current_bg, (0, 0))
 
         if getattr(self, "showGameChoice", False):
@@ -979,10 +1057,17 @@ class MenuScene(BaseScene):
 
         elif self.showGameTypeMenu:
             draw_text_centered(window, t("Network Type"), Assets.fonts['f150'], (255, 255, 255), (0, 0, 0), (self.cx, int(self.engine.HEIGHT * 0.12), 0, 0), int(sc(5)))
+
             for btn, txt in [(self.local_btn_rect, t("Local Game")), (self.online_btn_rect, t("Online Game"))]:
                 h = btn.collidepoint(mx, my)
                 draw_alpha_rect(window, (0, 0, 0, 160), btn, "gradient" if h else (245,245,245), int(sc(3)), int(sc(15)))
                 draw_text_centered(window, txt, Assets.fonts['f60'] if h else Assets.fonts['f50'], "gradient" if h else (245,245,245), (0,0,0), btn, int(sc(4)) if h else int(sc(3)))
+
+            for btn in [self.help_local_btn, self.help_online_btn]:
+                hovered_help = btn.collidepoint(mx, my)
+                draw_alpha_rect(window, (0, 0, 0, 160), btn, "gradient" if hovered_help else (245, 245, 245), int(sc(3)) if hovered_help else int(sc(2)), int(sc(15)))
+                draw_text_centered(window, "?", Assets.fonts['f50'] if hovered_help else Assets.fonts['f40'], "gradient" if hovered_help else (255, 255, 255), (0, 0, 0), btn, int(sc(2)))
+
             hovered = self.back_btn.collidepoint(mx, my)
             draw_text_centered(window, t("Back"), Assets.fonts['f100'] if hovered else Assets.fonts['f80'], "gradient" if hovered else (245, 245, 245), (0, 0, 0), self.back_btn, int(sc(4)) if hovered else int(sc(3)))
 
@@ -993,6 +1078,7 @@ class MenuScene(BaseScene):
                 h = btn.collidepoint(mx, my)
                 draw_alpha_rect(window, (0, 0, 0, 160), btn, "gradient" if h else (245,245,245), int(sc(3)), int(sc(15)))
                 draw_text_centered(window, txt, Assets.fonts['f60'] if h else Assets.fonts['f50'], "gradient" if h else (245,245,245), (0,0,0), btn, int(sc(4)) if h else int(sc(3)))
+
             hovered = self.back_btn.collidepoint(mx, my)
             draw_text_centered(window, t("Back"), Assets.fonts['f100'] if hovered else Assets.fonts['f80'], "gradient" if hovered else (245, 245, 245), (0, 0, 0), self.back_btn, int(sc(4)) if hovered else int(sc(3)))
 
@@ -1139,6 +1225,40 @@ class MenuScene(BaseScene):
                     else:
                         hint = t(self.TITLE_CONDITIONS[title_id])
                         draw_text_centered(window, hint, Assets.fonts['text30'], (255, 255, 255), (0,0,0), self.title_hint_rect)
+
+                    self.draw_aligned_label(t("Updates:"), int(self.slider_bg.left - sc(20)), self.btn_check_update.centery, Assets.fonts['text50'], window)
+
+                    h_up = self.btn_check_update.collidepoint(mx, my)
+                    if updater.status == "checking":
+                        btn_txt = "Checking for updates..." if get_language() == "en" else "Проверка обновлений..."
+                        draw_alpha_rect(window, (0,0,0,160), self.btn_check_update, (150,150,150), int(sc(2)), int(sc(10)))
+                        draw_text_centered(window, btn_txt, Assets.fonts['text30'], (200,200,200), (0,0,0), self.btn_check_update, int(sc(2)))
+                    elif updater.status == "downloading":
+                        pct = int(updater.download_progress * 100)
+                        pygame.draw.rect(window, (30, 30, 30), self.btn_check_update, border_radius=int(sc(10)))
+                        fill_w = int(self.btn_check_update.width * updater.download_progress)
+                        if fill_w > 0:
+                            pygame.draw.rect(window, (0, 180, 0), pygame.Rect(self.btn_check_update.x, self.btn_check_update.y, fill_w, self.btn_check_update.height), border_radius=int(sc(10)))
+                        draw_alpha_rect(window, (0,0,0,0), self.btn_check_update, (245,245,245), int(sc(3)), int(sc(10)))
+                        btn_txt = f"Downloading: {pct}%" if get_language() == "en" else f"Загрузка: {pct}%"
+                        draw_text_centered(window, btn_txt, Assets.fonts['text30'], (255,255,255), (0,0,0), self.btn_check_update, int(sc(2)))
+                    elif updater.status == "ready":
+                        draw_alpha_rect(window, (0,0,0,160), self.btn_check_update, (0, 255, 0), int(sc(3)), int(sc(10)))
+                        btn_txt = "Install Update & Restart" if get_language() == "en" else "Установить и перезапустить"
+                        draw_text_centered(window, btn_txt, Assets.fonts['text30'], (0, 255, 0) if h_up else (255,255,255), (0,0,0), self.btn_check_update, int(sc(2)))
+                    elif updater.status == "available":
+                        ver = updater.latest_version
+                        draw_alpha_rect(window, (0,0,0,160), self.btn_check_update, "gradient" if h_up else (218,165,32), int(sc(3)), int(sc(10)))
+                        btn_txt = f"Update to {ver}" if get_language() == "en" else f"Обновить до {ver}"
+                        draw_text_centered(window, btn_txt, Assets.fonts['text30'], (255,215,0) if h_up else (255,255,255), (0,0,0), self.btn_check_update, int(sc(2)))
+                    elif updater.status == "no_update":
+                        draw_alpha_rect(window, (0,0,0,160), self.btn_check_update, (100,100,100), int(sc(2)), int(sc(10)))
+                        btn_txt = f"Latest version ({updater.current_version})" if get_language() == "en" else f"Установлена последняя версия ({updater.current_version})"
+                        draw_text_centered(window, btn_txt, Assets.fonts['text30'], (180,180,180), (0,0,0), self.btn_check_update, int(sc(2)))
+                    else:
+                        draw_alpha_rect(window, (0,0,0,160), self.btn_check_update, "gradient" if h_up else (245,245,245), int(sc(3)), int(sc(10)))
+                        btn_txt = "Check for Updates" if get_language() == "en" else "Проверить обновления"
+                        draw_text_centered(window, btn_txt, Assets.fonts['text30'], "gradient" if h_up else (245,245,245), (0,0,0), self.btn_check_update, int(sc(2)))
 
                 elif self.settings_tab == "themes":
                     is_lei_unlocked = "Lei" in self.engine.current_progress.get("skins_unlocked", ["Musa"])
@@ -1414,9 +1534,45 @@ class MenuScene(BaseScene):
                 draw_alpha_rect(window, (0, 0, 0, 100), self.spin_btn_rect, (80, 80, 80), int(sc(1)), int(sc(15)))
                 draw_text_centered(window, spin_lbl, Assets.fonts['text20'], (150, 150, 150), (0, 0, 0), self.spin_btn_rect)
 
+            if updater.status in ["available", "ready"]:
+                h_b = self.update_banner_rect.collidepoint(mx, my)
+                draw_alpha_rect(window, (0, 0, 0, 180), self.update_banner_rect, (0, 255, 0) if updater.status == "ready" else "gradient", int(sc(3)), int(sc(12)))
+                if updater.status == "ready":
+                    b_txt1 = "Update Ready!" if get_language() == "en" else "Обновление готово!"
+                    b_txt2 = "Click to Install" if get_language() == "en" else "Нажмите для установки"
+                    draw_text_centered(window, b_txt1, Assets.fonts['text30'], (0, 255, 0), (0, 0, 0), (self.update_banner_rect.x, self.update_banner_rect.y + int(sc(10)), self.update_banner_rect.width, int(sc(30))), int(sc(2)))
+                    draw_text_centered(window, b_txt2, Assets.fonts['text20'], (255, 255, 255), (0, 0, 0), (self.update_banner_rect.x, self.update_banner_rect.y + int(sc(45)), self.update_banner_rect.width, int(sc(25))))
+                else:
+                    b_txt1 = f"New Version: {updater.latest_version}" if get_language() == "en" else f"Доступна {updater.latest_version}!"
+                    b_txt2 = "Click to Update" if get_language() == "en" else "Нажмите для обновления"
+                    draw_text_centered(window, b_txt1, Assets.fonts['text30'], (255, 215, 0), (0, 0, 0), (self.update_banner_rect.x, self.update_banner_rect.y + int(sc(10)), self.update_banner_rect.width, int(sc(30))), int(sc(2)))
+                    draw_text_centered(window, b_txt2, Assets.fonts['text20'], (255, 255, 255), (0, 0, 0), (self.update_banner_rect.x, self.update_banner_rect.y + int(sc(45)), self.update_banner_rect.width, int(sc(25))))
+
             for btn, txt in [(self.play_btn, t("Play")), (self.shop_btn, t("Luck Shop")), (self.set_btn, t("Settings")), (self.auth_btn, t("Authors")), (self.exit_btn, t("Exit"))]:
                 h = btn.collidepoint(mx, my)
                 draw_text_centered(window, txt, Assets.fonts['f60'] if h else Assets.fonts['f50'], "gradient" if h else (245,245,245), (0,0,0), btn, int(sc(4)) if h else int(sc(3)))
+
+        if getattr(self, "help_type_open", None) is not None:
+            draw_alpha_rect(window, (0, 0, 0, 200), (0, 0, self.engine.WIDTH, self.engine.HEIGHT), (0, 0, 0), 0, 0)
+
+            panel_rect = pygame.Rect(0, 0, int(sc(1400)), int(sc(700)))
+            panel_rect.center = (self.cx, self.cy)
+            draw_alpha_rect(window, (0, 0, 0, 180), panel_rect, (218, 165, 32), int(sc(3)), int(sc(15)))
+
+            title_key = "Local Network Guide" if self.help_type_open == "local" else "Online Network Guide"
+            draw_text_centered(window, t(title_key), Assets.fonts['f60'], (255, 215, 0), (0, 0, 0), (panel_rect.x, panel_rect.y + int(sc(20)), panel_rect.width, int(sc(80))), int(sc(2)))
+
+            instr_key = "local_instructions" if self.help_type_open == "local" else "online_instructions"
+            instructions = t(instr_key).split('\n')
+            y_off = panel_rect.y + int(sc(120))
+            for line in instructions:
+                draw_text_centered(window, line, Assets.fonts['text40'], (255, 255, 255), (0, 0, 0), (panel_rect.x + int(sc(20)), y_off, panel_rect.width - int(sc(40)), int(sc(40))), 0)
+                y_off += int(sc(45))
+
+            self.help_close_btn.center = (self.cx, panel_rect.bottom - int(sc(60)))
+            h_c = self.help_close_btn.collidepoint(real_mx, real_my)
+            draw_alpha_rect(window, (0, 0, 0, 160), self.help_close_btn, (255, 215, 0) if h_c else (218, 165, 32), int(sc(3)) if h_c else int(sc(2)), int(sc(10)))
+            draw_text_centered(window, t("Close"), Assets.fonts['text50'], "gradient" if h_c else (255, 255, 255), (0, 0, 0), self.help_close_btn, int(sc(2)))
 
         for p in self.particles:
             alpha = int((p[4] / p[7]) * 255)

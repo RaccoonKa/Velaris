@@ -66,6 +66,7 @@ class FoolScene(BaseScene):
 
         self.texture_cache = {}
         self.bot_timer = 0
+        self.money_notice_timer = 0
         self.hovered_card = None
         self.shuffle_count = 0
         self.deal_queue = []
@@ -118,9 +119,10 @@ class FoolScene(BaseScene):
             return (255, 255 - glow, 0)
         return (255, 215, 0)
 
-    def _show_emoji(self, pid, idx):
+    def _show_emoji(self, pid, idx, pack="Standard"):
         self.active_emojis[pid] = {
             "idx": idx,
+            "pack": pack,
             "timer": pygame.time.get_ticks() + self.emoji_display_time,
             "start_time": pygame.time.get_ticks()
         }
@@ -171,6 +173,15 @@ class FoolScene(BaseScene):
             hand = self.players[pid].get_deck().cards
             if not any(c.value == card.value and c.suit == card.suit for c in hand):
                 self.players[pid].take_card(card)
+
+    def _get_fallback_name(self, pid):
+        if pid == self.engine.my_id:
+            return getattr(self.engine, "nickname_text", "Player")
+        if self.mode == "singleplayer":
+            return "Bot"
+        sorted_ids = sorted(list(self.players.keys()))
+        display_num = sorted_ids.index(pid) + 1 if pid in sorted_ids else pid + 1
+        return self.player_nicknames.get(pid, f"{t('Player ')}{display_num}")
 
     def on_enter(self, mode="singleplayer"):
         self.mode = mode
@@ -304,7 +315,7 @@ class FoolScene(BaseScene):
             if self.mode == "multiplayer_host" and self.engine.server:
                 self.engine.server.broadcast({"action": "deal_anim", "target": "trump", "val": c.value, "suit": c.suit})
             img = self._get_cached_texture(c.get_texture_path(), (self.card_w, self.card_h))
-            self._deal_animated(c, self.deck_pos[0] - sc(50), self.deck_pos[1] + sc(20), self.deal_next_card, img=img)
+            self._deal_animated(c, self.deck_pos[0] - sc(90), self.deck_pos[1] + sc(20), self.deal_next_card, img=img)
         else:
             c = self.deck.erase(-1)
             if self.mode == "multiplayer_host" and self.engine.server:
@@ -418,7 +429,7 @@ class FoolScene(BaseScene):
         total_val = sum(p.get_bet().get_value() for p in self.players.values())
         if total_val <= 0:
             return
-        px = self.deck_pos[0] - sc(250)
+        px = self.deck_pos[0] - sc(320)
 
         chips = [10000] * (total_val // 10000)
         rem = total_val % 10000
@@ -472,14 +483,7 @@ class FoolScene(BaseScene):
                 self.money[self.engine.my_id] -= bet_val
                 self.engine.current_progress["money"] = self.money.get(self.engine.my_id, 0)
                 save_progress(self.engine.current_progress)
-                theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
-                c_img = self._get_cached_texture(os.path.join("textures", "chips", theme, f"{bet_val}.png"), (self.cw, self.ch))
-                px = self.deck_pos[0] - sc(250)
-                anim_start = (int(self.mountain_pos[0] + sc(100)), int(self.mountain_pos[1] + sc(80)))
-                total_val = sum(p.get_bet().get_value() for p in self.players.values())
-                count = sum(total_val // d for d in [10000, 2500, 1000, 500, 250, 100])
-                anim_end = (int(px - self.cw // 2), int(self.cy - self.ch // 2 - max(0, count - 1) * sc(8)))
-                self.animator.add(c_img, anim_start, anim_end, self.rebuild_placed_chips, 20)
+                self.rebuild_placed_chips()
                 if getattr(self.engine, 'server', None): self.engine.server.broadcast({"action": "bet", "id": self.engine.my_id, "val": bet_val})
 
     def handle_events(self, events):
@@ -518,11 +522,12 @@ class FoolScene(BaseScene):
                         row = int(rel_y // sc(80))
                         if 0 <= col < 4 and 0 <= row < 2:
                             idx = row * 4 + col
-                            self._show_emoji(self.engine.my_id, idx)
+                            pack = self.engine.current_settings.get("emoji_pack", "Standard")
+                            self._show_emoji(self.engine.my_id, idx, pack)
                             if self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
-                                self.engine.client.send_data({"action": "emoji", "idx": idx})
+                                self.engine.client.send_data({"action": "emoji", "idx": idx, "pack": pack})
                             elif getattr(self.engine, 'server', None):
-                                self.engine.server.broadcast({"action": "emoji", "id": self.engine.my_id, "idx": idx})
+                                self.engine.server.broadcast({"action": "emoji", "id": self.engine.my_id, "idx": idx, "pack": pack})
                         return
                     else:
                         if not emoji_btn_rect.collidepoint(mx, my):
@@ -762,7 +767,11 @@ class FoolScene(BaseScene):
                 while len(self.players[pid].get_deck().cards) + self.deal_queue.count(pid) < 6 and (len(self.deck) - self.deal_queue.count("trump") - len(self.deal_queue)) > 0:
                     self.deal_queue.append(pid)
 
-        self.attacker_pid = self.defender_pid
+        if len(self.players[self.defender_pid].get_deck().cards) > 0:
+            self.attacker_pid = self.defender_pid
+        else:
+            self.attacker_pid = self.get_next_player(self.defender_pid)
+
         self.defender_pid = self.get_next_player(self.attacker_pid)
         self.current_turn_pid = self.attacker_pid
 
@@ -776,11 +785,37 @@ class FoolScene(BaseScene):
             if getattr(self.engine, 'server', None): self._broadcast_state()
 
     def get_next_player(self, pid):
-        sorted_ids = sorted(list(self.players.keys()))
-        if not sorted_ids: return pid
-        if pid not in sorted_ids: return sorted_ids[0]
-        idx = sorted_ids.index(pid)
-        return sorted_ids[(idx + 1) % len(sorted_ids)]
+        all_ids = sorted(list(self.players.keys()))
+        if not all_ids: return pid
+
+        idx = 0
+        for i, p in enumerate(all_ids):
+            if p >= pid:
+                idx = i
+                if p == pid:
+                    break
+
+        for i in range(1, len(all_ids) + 1):
+            next_pid = all_ids[(idx + i) % len(all_ids)]
+            if len(self.players[next_pid].get_deck().cards) > 0:
+                return next_pid
+        return all_ids[0]
+
+    def _update_achievements(self, is_winner, bet):
+        if "titles_unlocked" not in self.engine.current_progress:
+            self.engine.current_progress["titles_unlocked"] = ["Новичок"]
+
+        if is_winner:
+            self.engine.current_progress["win_count"] = self.engine.current_progress.get("win_count", 0) + 1
+            if self.engine.current_progress["win_count"] >= 100:
+                if "Коллектор" not in self.engine.current_progress["titles_unlocked"]:
+                    self.engine.current_progress["titles_unlocked"].append("Коллектор")
+                if hasattr(self.engine, 'unlock_title'): self.engine.unlock_title("Коллектор")
+            if bet >= 100000:
+                if "Крупье на пенсии" not in self.engine.current_progress["titles_unlocked"]:
+                    self.engine.current_progress["titles_unlocked"].append("Крупье на пенсии")
+                if hasattr(self.engine, 'unlock_title'): self.engine.unlock_title("Крупье на пенсии")
+        save_progress(self.engine.current_progress)
 
     def check_game_over(self):
         if self.game_phase == "game_over":
@@ -791,9 +826,11 @@ class FoolScene(BaseScene):
             self.ready_to_play.clear()
             self.fool_id = None
             if self.engine.my_id in self.players:
-                bet = self.players[self.engine.my_id].get_bet().get_value()
-                self.money[self.engine.my_id] = self.money.get(self.engine.my_id, 0) + bet * 2
+                my_bet = self.players[self.engine.my_id].get_bet().get_value()
+                total_bank = sum(p.get_bet().get_value() for p in self.players.values())
+                self.money[self.engine.my_id] = self.money.get(self.engine.my_id, 0) + total_bank
                 self.engine.current_progress["money"] = self.money.get(self.engine.my_id, 0)
+                self._update_achievements(True, my_bet)
                 save_progress(self.engine.current_progress)
             return
 
@@ -802,10 +839,15 @@ class FoolScene(BaseScene):
             self.game_phase = "game_over"
             self.ready_to_play.clear()
             self.fool_id = active_players[0] if active_players else None
-            if self.fool_id != self.engine.my_id:
-                bet = self.players[self.engine.my_id].get_bet().get_value() if self.engine.my_id in self.players else 0
-                self.money[self.engine.my_id] = self.money.get(self.engine.my_id, 0) + bet * 2
-                self.engine.current_progress["money"] = self.money.get(self.engine.my_id, 0)
+
+            if self.engine.my_id in self.players:
+                my_bet = self.players[self.engine.my_id].get_bet().get_value()
+                is_winner = (self.fool_id != self.engine.my_id)
+                if is_winner:
+                    total_bank = sum(p.get_bet().get_value() for p in self.players.values())
+                    self.money[self.engine.my_id] = self.money.get(self.engine.my_id, 0) + total_bank
+                    self.engine.current_progress["money"] = self.money.get(self.engine.my_id, 0)
+                self._update_achievements(is_winner, my_bet)
                 save_progress(self.engine.current_progress)
 
     def draw(self, window):
@@ -822,13 +864,11 @@ class FoolScene(BaseScene):
         if self.trump_card and len(self.deck.cards) > 0:
             trump_img = self._get_cached_texture(self.trump_card.get_texture_path(), (self.card_w, self.card_h))
             visuals = self.card_visuals.get(self.trump_card, {"offset": (0, 0), "angle": 0})
-            if visuals["angle"] != 0:
-                trump_rotated = pygame.transform.rotozoom(trump_img, 90 + visuals["angle"], 1.0)
-                rect = trump_rotated.get_rect(center=(self.deck_pos[0] - sc(50) + self.card_w//2, self.deck_pos[1] + sc(20) + self.card_h//2))
-                window.blit(trump_rotated, rect.topleft)
-            else:
-                trump_rotated = pygame.transform.rotate(trump_img, 90)
-                window.blit(trump_rotated, (self.deck_pos[0] - sc(50), self.deck_pos[1] + sc(20)))
+            trump_rotated = pygame.transform.rotozoom(trump_img, 90 + visuals["angle"], 1.0)
+            center_x = int(self.deck_pos[0] - sc(90) + self.card_w // 2)
+            center_y = int(self.deck_pos[1] + sc(20) + self.card_h // 2)
+            rect = trump_rotated.get_rect(center=(center_x, center_y))
+            window.blit(trump_rotated, rect.topleft)
 
         if len(self.deck) > 0 and self.game_phase not in ["betting"]:
             for i in range(min(5, len(self.deck))):
@@ -853,13 +893,7 @@ class FoolScene(BaseScene):
             else:
                 px = self.get_player_center(pid)
 
-            if pid == self.engine.my_id:
-                p_text = getattr(self.engine, "nickname_text", "Player")
-            elif self.mode == "singleplayer":
-                p_text = "Bot"
-            else:
-                p_text = self.player_nicknames.get(pid, f"{t('Player ')}{pid + 1}")
-
+            p_text = self._get_fallback_name(pid)
             p_title = self.player_titles.get(pid, "Новичок") if pid != self.engine.my_id else self.engine.current_progress.get("current_title", "Новичок")
 
             if pid == self.engine.my_id:
@@ -917,9 +951,19 @@ class FoolScene(BaseScene):
             if pid in self.active_emojis:
                 emo_data = self.active_emojis[pid]
                 idx = emo_data["idx"]
-                if idx < len(Assets.emojis):
-                    emoji_img = Assets.emojis[idx]
+                pack_name = emo_data.get("pack", "Standard")
 
+                emoji_path = os.path.join("textures", "emojis", pack_name, f"{idx}.png")
+                if emoji_path not in self.texture_cache:
+                    try:
+                        self.texture_cache[emoji_path] = pygame.image.load(emoji_path).convert_alpha()
+                    except:
+                        if idx < len(Assets.emojis):
+                            self.texture_cache[emoji_path] = Assets.emojis[idx]
+
+                emoji_img = self.texture_cache.get(emoji_path)
+
+                if emoji_img:
                     time_alive = current_time - emo_data["start_time"]
                     anim_duration = 600
                     if time_alive <= anim_duration:
@@ -941,6 +985,23 @@ class FoolScene(BaseScene):
 
         for chip_img, chip_pos in self.placed_chips: window.blit(chip_img, chip_pos)
         self.animator.draw(window)
+
+        if self.engine.my_id in self.money and self.game_phase == "betting" and self.money.get(self.engine.my_id, 0) < 100 and self.players[self.engine.my_id].get_bet().get_value() == 0:
+            if self.money_notice_timer == 0: self.money_notice_timer = pygame.time.get_ticks() + 2500
+            lose_rect = pygame.Rect(0, 0, int(sc(700)), int(sc(180))); lose_rect.center = (self.cx, self.cy - sc(300))
+            draw_alpha_rect(window, (0, 0, 0, 160), lose_rect, (218, 165, 32), int(sc(2)), int(sc(15)))
+            draw_text_centered(window, t("You lose all your money!"), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (lose_rect.x, lose_rect.y, lose_rect.width, int(sc(60))), 0)
+            draw_text_centered(window, t("So, to prevent you from leaving,"), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (lose_rect.x, int(lose_rect.y + sc(60)), lose_rect.width, int(sc(60))), 0)
+            draw_text_centered(window, t("we gave you some money."), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (lose_rect.x, int(lose_rect.y + sc(120)), lose_rect.width, int(sc(60))), 0)
+
+            if pygame.time.get_ticks() >= self.money_notice_timer:
+                self.money[self.engine.my_id] = 2500
+                self.engine.current_progress["money"] = 2500
+                self.engine.unlock_title("Главный спонсор")
+                save_progress(self.engine.current_progress)
+                self.money_notice_timer = 0
+                if getattr(self.engine, 'server', None): self.engine.server.broadcast({"action": "pity_money", "id": self.engine.my_id})
+                elif getattr(self.engine, 'client', None): self.engine.client.send_data({"action": "pity_money", "id": self.engine.my_id})
 
         if self.engine.my_id in self.players:
             draw_alpha_rect(window, (0, 0, 0, 160), (int(sc(20)), int(sc(20)), int(sc(350)), int(sc(50))), (218, 165, 32), int(sc(2)), int(sc(10)))
@@ -1009,9 +1070,17 @@ class FoolScene(BaseScene):
                     draw_text_centered(window, t("Waiting for others..."), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (int(self.cx - sc(250)), int(self.cy - sc(30)), int(sc(500)), int(sc(60))))
 
         elif self.game_phase == "game_over":
-            res_text = t("You win!") if getattr(self, 'fool_id', None) != self.engine.my_id else t("You're a fool!")
-            text_w = max(int(sc(580)), Assets.fonts['f60'].size(res_text)[0] + int(sc(70)))
+            fool_id = getattr(self, 'fool_id', None)
+            if fool_id == self.engine.my_id:
+                res_text = t("You're a fool!")
+            elif fool_id is not None:
+                winner_id = next((pid for pid in self.players if pid != fool_id), self.engine.my_id)
+                winner_name = self._get_fallback_name(winner_id)
+                res_text = f"{t('Winner:')} {winner_name}"
+            else:
+                res_text = t("Draw!")
 
+            text_w = max(int(sc(580)), Assets.fonts['f60'].size(res_text)[0] + int(sc(100)))
             res_rect = pygame.Rect(0, 0, text_w, int(sc(100)))
             res_rect.center = (self.cx, int(self.cy - sc(60)))
 
@@ -1037,9 +1106,10 @@ class FoolScene(BaseScene):
                     draw_alpha_rect(window, (0, 0, 0, 160), self.pass_btn, (255, 215, 0) if h else (218, 165, 32), int(sc(3)) if h else int(sc(2)), int(sc(15)))
                     draw_text_centered(window, t("Done"), Assets.fonts['f60'] if h else Assets.fonts['f50'], "gradient" if h else (255, 255, 255), (0, 0, 0), self.pass_btn)
             else:
-                msg = t("Opponent's turn")
-                draw_alpha_rect(window, (0, 0, 0, 160), (int(self.cx - sc(200)), int(self.cy), sc(420), int(sc(70))), (218, 165, 32), int(sc(2)), int(sc(15)))
-                draw_text_centered(window, msg, Assets.fonts['f40'], (255, 255, 255), (0, 0, 0), (int(self.cx - sc(200)), int(self.cy), sc(420), int(sc(70))))
+                msg = f"{self._get_fallback_name(self.current_turn_pid)}{t('''s Turn''')}"
+                msg_w = max(int(sc(420)), Assets.fonts['f40'].size(msg)[0] + int(sc(60)))
+                draw_alpha_rect(window, (0, 0, 0, 160), (int(self.cx - msg_w//2), int(self.cy), msg_w, int(sc(70))), (218, 165, 32), int(sc(2)), int(sc(15)))
+                draw_text_centered(window, msg, Assets.fonts['f40'], (255, 255, 255), (0, 0, 0), (int(self.cx - msg_w//2), int(self.cy), msg_w, int(sc(70))))
 
         has_bet = self.players[self.engine.my_id].get_bet().get_value() > 0 if self.engine.my_id in self.players else False
         can_exit = (self.game_phase == "game_over") or (self.game_phase == "betting" and not has_bet)
@@ -1093,6 +1163,8 @@ class FoolScene(BaseScene):
                 self.player_titles.pop(cid, None)
                 self.player_nicknames.pop(cid, None)
 
+                self.engine.server.broadcast({"action": "player_left", "id": cid})
+
                 if self.game_phase in ["attack", "defend", "take_add"]:
                     if is_turn:
                         if self.taking:
@@ -1129,16 +1201,9 @@ class FoolScene(BaseScene):
                         self.players[cid].get_bet().value += parsed_val
                         self.money[cid] -= parsed_val
                         if cid == self.engine.my_id:
-                            self.engine.current_progress["money"] = self.money[self.engine.my_id]
+                            self.engine.current_progress["money"] = self.money.get(self.engine.my_id, 0)
                             save_progress(self.engine.current_progress)
-                        theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
-                        c_img = self._get_cached_texture(os.path.join("textures", "chips", theme, f"{parsed_val}.png"), (self.cw, self.ch))
-                        px = self.deck_pos[0] - sc(250)
-                        anim_start = (int(self.mountain_pos[0] + sc(100)), int(self.mountain_pos[1] + sc(80)))
-                        total_val = sum(p.get_bet().get_value() for p in self.players.values())
-                        count = sum(total_val // d for d in [10000, 2500, 1000, 500, 250, 100])
-                        anim_end = (int(px - self.cw // 2), int(self.cy - self.ch // 2 - max(0, count - 1) * sc(8)))
-                        self.animator.add(c_img, anim_start, anim_end, self.rebuild_placed_chips, 20)
+                        self.rebuild_placed_chips()
                         self.engine.server.broadcast({"action": "bet", "id": cid, "val": parsed_val})
             elif action == "cancel_bet" and self.game_phase == "betting":
                 if cid in self.players:
@@ -1148,7 +1213,7 @@ class FoolScene(BaseScene):
                         self.money[cid] += current_bet
                         self.players[cid].get_bet().value = 0
                         if cid == self.engine.my_id:
-                            self.engine.current_progress["money"] = self.money[self.engine.my_id]
+                            self.engine.current_progress["money"] = self.money.get(self.engine.my_id, 0)
                             save_progress(self.engine.current_progress)
                         self.rebuild_placed_chips()
                         self.engine.server.broadcast({"action": "cancel_bet", "id": cid})
@@ -1188,8 +1253,13 @@ class FoolScene(BaseScene):
                 self.engine.server.broadcast({"action": "ready", "id": cid})
             elif action == "emoji":
                 idx = data.get("idx")
-                self._show_emoji(cid, idx)
-                self.engine.server.broadcast({"action": "emoji", "id": cid, "idx": idx})
+                pack = data.get("pack", "Standard")
+                self._show_emoji(cid, idx, pack)
+                self.engine.server.broadcast({"action": "emoji", "id": cid, "idx": idx, "pack": pack})
+            elif action == "pity_money":
+                if self.money.get(cid, 0) < 100:
+                    self.money[cid] = 2500
+                    self.engine.server.broadcast({"action": "pity_money", "id": cid})
 
     def _handle_client(self):
         while not self.engine.client.message_queue.empty():
@@ -1222,6 +1292,12 @@ class FoolScene(BaseScene):
                 self.ready_to_play.discard(msg_obj["id"])
                 if self.game_phase == "betting":
                     self.rebuild_placed_chips()
+            elif action == "pity_money":
+                self.money[msg_obj["id"]] = 2500
+                if msg_obj["id"] == self.engine.my_id:
+                    self.engine.current_progress["money"] = 2500
+                    self.engine.unlock_title("Главный спонсор")
+                    save_progress(self.engine.current_progress)
             elif action == "shuffle_anim":
                 self.game_phase = "shuffling"
                 self.shuffle_count = 0
@@ -1234,7 +1310,7 @@ class FoolScene(BaseScene):
                 if target == "trump":
                     self.trump_card = c
                     img = self._get_cached_texture(c.get_texture_path(), (self.card_w, self.card_h))
-                    self._deal_animated(c, self.deck_pos[0] - sc(50), self.deck_pos[1] + sc(20), lambda: None, img=img)
+                    self._deal_animated(c, self.deck_pos[0] - sc(90), self.deck_pos[1] + sc(20), lambda: None, img=img)
                 else:
                     if self.deck.cards:
                         self.deck.erase(-1)
@@ -1299,16 +1375,9 @@ class FoolScene(BaseScene):
                     self.players[cid].get_bet().value += bet_val
                     self.money[cid] -= bet_val
                     if cid == self.engine.my_id:
-                        self.engine.current_progress["money"] = self.money[self.engine.my_id]
+                        self.engine.current_progress["money"] = self.money.get(self.engine.my_id, 0)
                         save_progress(self.engine.current_progress)
-                    theme = "cyberpunk" if self.engine.current_theme == "cyberpunk" else "default"
-                    c_img = self._get_cached_texture(os.path.join("textures", "chips", theme, f"{bet_val}.png"), (self.cw, self.ch))
-                    px = self.deck_pos[0] - sc(250)
-                    anim_start = (int(self.mountain_pos[0] + sc(100)), int(self.mountain_pos[1] + sc(80)))
-                    total_val = sum(p.get_bet().get_value() for p in self.players.values())
-                    count = sum(total_val // d for d in [10000, 2500, 1000, 500, 250, 100])
-                    anim_end = (int(px - self.cw // 2), int(self.cy - self.ch // 2 - max(0, count - 1) * sc(8)))
-                    self.animator.add(c_img, anim_start, anim_end, self.rebuild_placed_chips, 20)
+                    self.rebuild_placed_chips()
             elif action == "cancel_bet":
                 cid = msg_obj["id"]
                 if cid in self.players:
@@ -1317,7 +1386,7 @@ class FoolScene(BaseScene):
                     self.money[cid] += current_bet
                     self.players[cid].get_bet().value = 0
                     if cid == self.engine.my_id:
-                        self.engine.current_progress["money"] = self.money[self.engine.my_id]
+                        self.engine.current_progress["money"] = self.money.get(self.engine.my_id, 0)
                         save_progress(self.engine.current_progress)
                     self.rebuild_placed_chips()
             elif action == "ready":
@@ -1332,11 +1401,20 @@ class FoolScene(BaseScene):
 
                 if self.game_phase == "game_over" and old_phase != "game_over":
                     self.ready_to_play.clear()
-                    if self.fool_id != self.engine.my_id:
-                        bet = self.players[self.engine.my_id].get_bet().get_value() if self.engine.my_id in self.players else 0
-                        self.money[self.engine.my_id] = self.money.get(self.engine.my_id, 0) + bet * 2
-                        self.engine.current_progress["money"] = self.money.get(self.engine.my_id, 0)
+                    if self.engine.my_id in self.players:
+                        my_bet = self.players[self.engine.my_id].get_bet().get_value()
+                        is_winner = (self.fool_id != self.engine.my_id)
+                        if is_winner:
+                            total_bank = sum(p.get_bet().get_value() for p in self.players.values())
+                            self.money[self.engine.my_id] = self.money.get(self.engine.my_id, 0) + total_bank
+                            self.engine.current_progress["money"] = self.money.get(self.engine.my_id, 0)
+                        self._update_achievements(is_winner, my_bet)
                         save_progress(self.engine.current_progress)
+
+                self.current_turn_pid = msg_obj["turn"]
+                self.attacker_pid = msg_obj["attacker"]
+                self.defender_pid = msg_obj["defender"]
+                self.taking = msg_obj["taking"]
 
                 self.current_turn_pid = msg_obj["turn"]
                 self.attacker_pid = msg_obj["attacker"]
@@ -1362,4 +1440,5 @@ class FoolScene(BaseScene):
                     for c_data in msg_obj["cards"]:
                         self.players[pid].take_card(Card(c_data["val"], c_data["suit"]))
             elif action == "emoji":
-                self._show_emoji(msg_obj["id"], msg_obj["idx"])
+                pack = msg_obj.get("pack", "Standard")
+                self._show_emoji(msg_obj["id"], msg_obj["idx"], pack)

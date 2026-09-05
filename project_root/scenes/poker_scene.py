@@ -153,9 +153,19 @@ class PokerScene(BaseScene):
         self.set_bet_2500 = Button(pos[4][0], pos[4][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_2500.set_button_texture(os.path.join("textures", "chips", theme, "2500.png"))
         self.set_bet_10000 = Button(pos[5][0], pos[5][1], self.cw, self.ch, self.engine.WINDOW); self.set_bet_10000.set_button_texture(os.path.join("textures", "chips", theme, "10000.png"))
 
-    def _show_emoji(self, pid, idx):
+    def _get_fallback_name(self, pid):
+        if pid == self.engine.my_id:
+            return getattr(self.engine, "nickname_text", "Player")
+        if self.mode == "singleplayer":
+            return f"Bot {pid}"
+        sorted_ids = sorted(list(self.players.keys()))
+        display_num = sorted_ids.index(pid) + 1 if pid in sorted_ids else pid + 1
+        return self.player_nicknames.get(pid, f"{t('Player ')}{display_num}")
+
+    def _show_emoji(self, pid, idx, pack="Standard"):
         self.active_emojis[pid] = {
             "idx": idx,
+            "pack": pack,
             "timer": pygame.time.get_ticks() + self.emoji_display_time,
             "start_time": pygame.time.get_ticks()
         }
@@ -262,7 +272,35 @@ class PokerScene(BaseScene):
             return (255, 255 - glow, 0)
         return (255, 215, 0)
 
+    def _refund_uncalled_bets(self):
+        if not self.round_bets: return
+        max_bet = max(self.round_bets.values())
+        if max_bet == 0: return
+
+        for pid, bet in self.round_bets.items():
+            if bet == max_bet:
+                others = [b for p, b in self.round_bets.items() if p != pid]
+                others_max = max(others) if others else 0
+                if bet > others_max:
+                    refund = bet - others_max
+                    self.round_bets[pid] -= refund
+                    self.money[pid] += refund
+                    if pid == self.engine.my_id:
+                        self.engine.current_progress["money"] = self.money[pid]
+                        save_progress(self.engine.current_progress)
+                break
+
     def start_hand(self):
+        if self.money.get(self.engine.my_id, 0) < 100:
+            self.money[self.engine.my_id] = 2500
+            self.engine.current_progress["money"] = 2500
+            self.engine.unlock_title("Главный спонсор")
+            save_progress(self.engine.current_progress)
+            if getattr(self.engine, 'server', None):
+                self.engine.server.broadcast({"action": "pity_money", "id": self.engine.my_id})
+            elif getattr(self.engine, 'client', None):
+                self.engine.client.send_data({"action": "pity_money", "id": self.engine.my_id})
+
         self.reset_game_state()
         if getattr(self.engine, 'server', None):
             self.engine.server.broadcast({"action": "start_hand"})
@@ -446,6 +484,8 @@ class PokerScene(BaseScene):
         self._sync_state()
 
     def _next_phase(self):
+        self._refund_uncalled_bets()
+
         for pid, bet in self.round_bets.items():
             self.pot += bet
         self.round_bets = {pid: 0 for pid in self.players}
@@ -454,7 +494,7 @@ class PokerScene(BaseScene):
         self.rebuild_placed_chips()
 
         if len(self.active_players) <= 1:
-            self._showdown()
+            self._showdown(refunded=True)
             return
 
         if self.game_phase == "preflop":
@@ -467,14 +507,17 @@ class PokerScene(BaseScene):
             self.game_phase = "river"
             self._deal_community(1)
         elif self.game_phase == "river":
-            self._showdown()
+            self._showdown(refunded=True)
             return
 
         self.current_turn_idx = self.dealer_idx
         self._sync_state()
 
-    def _showdown(self):
+    def _showdown(self, refunded=False):
         self.game_phase = "showdown"
+        if not refunded:
+            self._refund_uncalled_bets()
+
         for pid, bet in self.round_bets.items():
             self.pot += bet
         self.round_bets = {pid: 0 for pid in self.players}
@@ -512,6 +555,8 @@ class PokerScene(BaseScene):
 
         if self.engine.my_id in self.money:
             self.engine.current_progress["money"] = self.money[self.engine.my_id]
+            is_winner = (self.engine.my_id in self.last_winners)
+            self._update_achievements(is_winner, self.pot)
             save_progress(self.engine.current_progress)
 
         if getattr(self.engine, 'server', None):
@@ -521,6 +566,22 @@ class PokerScene(BaseScene):
                 "money": {k: v for k, v in self.money.items()}
             })
 
+    def _update_achievements(self, is_winner, pot_size):
+        if "titles_unlocked" not in self.engine.current_progress:
+            self.engine.current_progress["titles_unlocked"] = ["Новичок"]
+
+        if is_winner:
+            self.engine.current_progress["win_count"] = self.engine.current_progress.get("win_count", 0) + 1
+            if self.engine.current_progress["win_count"] >= 100:
+                if "Коллектор" not in self.engine.current_progress["titles_unlocked"]:
+                    self.engine.current_progress["titles_unlocked"].append("Коллектор")
+                if hasattr(self.engine, 'unlock_title'): self.engine.unlock_title("Коллектор")
+            if pot_size >= 100000:
+                if "Крупье на пенсии" not in self.engine.current_progress["titles_unlocked"]:
+                    self.engine.current_progress["titles_unlocked"].append("Крупье на пенсии")
+                if hasattr(self.engine, 'unlock_title'): self.engine.unlock_title("Крупье на пенсии")
+        save_progress(self.engine.current_progress)
+    
     def update(self):
         self.animator.update()
 
@@ -610,6 +671,8 @@ class PokerScene(BaseScene):
                 self.player_titles.pop(cid, None)
                 self.player_nicknames.pop(cid, None)
 
+                self.engine.server.broadcast({"action": "player_left", "id": cid})
+
                 pids_after = sorted(list(self.players.keys()))
                 if pids_after:
                     self.dealer_idx = self.dealer_idx % len(pids_after)
@@ -644,8 +707,9 @@ class PokerScene(BaseScene):
                 self._sync_state()
             elif action == "emoji":
                 idx = data.get("idx")
-                self._show_emoji(cid, idx)
-                self.engine.server.broadcast({"action": "emoji", "id": cid, "idx": idx})
+                pack = data.get("pack", "Standard")
+                self._show_emoji(cid, idx, pack)
+                self.engine.server.broadcast({"action": "emoji", "id": cid, "idx": idx, "pack": pack})
             elif action == "fold" and pids and self.current_turn_idx < len(pids) and pids[self.current_turn_idx] == cid and self.game_phase in ["preflop", "flop", "turn", "river"]:
                 if cid in self.active_players:
                     self.active_players.remove(cid)
@@ -663,6 +727,10 @@ class PokerScene(BaseScene):
             elif action == "restart" and self.game_phase == "showdown":
                 self.ready_to_play.add(cid)
                 self.engine.server.broadcast({"action": "ready", "id": cid})
+            elif action == "pity_money":
+                if self.money.get(cid, 0) < 100:
+                    self.money[cid] = 2500
+                    self.engine.server.broadcast({"action": "pity_money", "id": cid})
 
     def _handle_client(self):
         while not self.engine.client.message_queue.empty():
@@ -729,13 +797,22 @@ class PokerScene(BaseScene):
                 self.game_phase = "showdown"
                 if self.engine.my_id in self.money:
                     self.engine.current_progress["money"] = self.money[self.engine.my_id]
+                    is_winner = (self.engine.my_id in self.last_winners)
+                    self._update_achievements(is_winner, self.pot)
                     save_progress(self.engine.current_progress)
             elif action == "emoji":
-                self._show_emoji(msg_obj["id"], msg_obj["idx"])
+                pack = msg_obj.get("pack", "Standard")
+                self._show_emoji(msg_obj["id"], msg_obj["idx"], pack)
             elif action == "ready":
                 self.ready_to_play.add(msg_obj["id"])
             elif action == "start_hand":
                 self.reset_game_state()
+            elif action == "pity_money":
+                self.money[msg_obj["id"]] = 2500
+                if msg_obj["id"] == self.engine.my_id:
+                    self.engine.current_progress["money"] = 2500
+                    self.engine.unlock_title("Главный спонсор")
+                    save_progress(self.engine.current_progress)
 
     def handle_events(self, events):
         mx, my = self.engine.mx, self.engine.my
@@ -767,11 +844,12 @@ class PokerScene(BaseScene):
                         row = int(rel_y // sc(80))
                         if 0 <= col < 4 and 0 <= row < 2:
                             idx = row * 4 + col
-                            self._show_emoji(self.engine.my_id, idx)
+                            pack = self.engine.current_settings.get("emoji_pack", "Standard")
+                            self._show_emoji(self.engine.my_id, idx, pack)
                             if self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
-                                self.engine.client.send_data({"action": "emoji", "idx": idx})
+                                self.engine.client.send_data({"action": "emoji", "idx": idx, "pack": pack})
                             elif getattr(self.engine, 'server', None):
-                                self.engine.server.broadcast({"action": "emoji", "id": self.engine.my_id, "idx": idx})
+                                self.engine.server.broadcast({"action": "emoji", "id": self.engine.my_id, "idx": idx, "pack": pack})
                         return
                     else:
                         if not emoji_btn_rect.collidepoint(mx, my):
@@ -1002,8 +1080,8 @@ class PokerScene(BaseScene):
 
             draw_alpha_rect(window, (0, 0, 0, 160), (int(px - sc(150)), int(info_y), int(sc(300)), int(sc(120))), box_color, int(sc(2)), int(sc(10)))
 
-            name = self.engine.nickname_text if pid == self.engine.my_id else self.player_nicknames.get(pid, f"Player {pid}" if self.mode != "singleplayer" else f"Bot {pid}")
-            p_title = self.player_titles.get(pid, "Шулер")
+            name = self._get_fallback_name(pid)
+            p_title = self.player_titles.get(pid, "Шулер") if pid != self.engine.my_id else self.engine.current_progress.get("current_title", "Новичок")
 
             draw_text_centered(window, f"[{t(p_title)}]", Assets.fonts['text30'], self.get_title_color(p_title), (0,0,0), (int(px - sc(150)), int(info_y + sc(10)), int(sc(300)), int(sc(30))), int(sc(2)))
             draw_text_centered(window, f"{name}: {self.money.get(pid, 0)}$", Assets.fonts['text30'], (255,255,255), (0,0,0), (int(px - sc(150)), int(info_y + sc(50)), int(sc(300)), int(sc(30))))
@@ -1043,9 +1121,19 @@ class PokerScene(BaseScene):
             if pid in self.active_emojis:
                 emo_data = self.active_emojis[pid]
                 idx = emo_data["idx"]
-                if idx < len(Assets.emojis):
-                    emoji_img = Assets.emojis[idx]
+                pack_name = emo_data.get("pack", "Standard")
 
+                emoji_path = os.path.join("textures", "emojis", pack_name, f"{idx}.png")
+                if emoji_path not in self.texture_cache:
+                    try:
+                        self.texture_cache[emoji_path] = pygame.image.load(emoji_path).convert_alpha()
+                    except:
+                        if idx < len(Assets.emojis):
+                            self.texture_cache[emoji_path] = Assets.emojis[idx]
+
+                emoji_img = self.texture_cache.get(emoji_path)
+
+                if emoji_img:
                     time_alive = current_time - emo_data["start_time"]
                     anim_duration = 600
                     if time_alive <= anim_duration:
@@ -1156,11 +1244,17 @@ class PokerScene(BaseScene):
             if self.engine.my_id in self.last_winners:
                 text = t("You win!")
             else:
-                winner_id = self.last_winners[0]
-                winner_name = self.player_nicknames.get(winner_id, f"Player {winner_id}" if self.mode != "singleplayer" else f"Bot {winner_id}")
-                text = t(f"{winner_name} wins!") if len(self.last_winners) == 1 else t("Split pot!")
+                if not self.last_winners:
+                    text = t("Draw!")
+                elif len(self.last_winners) == 1:
+                    winner_id = self.last_winners[0]
+                    winner_name = self._get_fallback_name(winner_id)
+                    text = f"{t('Winner:')} {winner_name}"
+                else:
+                    text = t("Split pot!")
 
-            win_rect = pygame.Rect(0, 0, int(sc(900)), int(sc(120)))
+            text_w = max(int(sc(900)), Assets.fonts['f80'].size(text)[0] + int(sc(100)))
+            win_rect = pygame.Rect(0, 0, text_w, int(sc(120)))
             win_rect.center = (self.cx, self.cy)
             draw_alpha_rect(window, (0, 0, 0, 180), win_rect, (218, 165, 32), int(sc(3)), int(sc(15)))
             draw_text_centered(window, text, Assets.fonts['f80'], (255, 215, 0), (0, 0, 0), win_rect)

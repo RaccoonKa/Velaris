@@ -112,7 +112,13 @@ TRANSLATIONS = {
         "durak_rules": "Goal: Get rid of all your cards! The last player with cards loses.\nThe player with the lowest trump card attacks first.\nDefender must beat cards with a higher card of the same suit or a trump.\nIf you can't beat the attack, you must take all cards on the table.\nAttackers can add cards of the same rank as those on the table.",
         "poker_rules": "Goal: Make the best 5-card hand (2 private + 5 community cards).\nPlayers use Call (match bet), Raise (increase bet), Fold (give up),\nor Check (pass turn without betting).\n4 Betting rounds: Pre-flop, Flop (3 cards), Turn (1), River (1).\nThe highest combination at the showdown wins the pot!",
         "Крути-вези!": "I got lucky!",
-        "Reset Bet": "Reset Bet"
+        "Reset Bet": "Reset Bet",
+        "Hold LMB and drag to scroll": "Hold LMB and drag to scroll",
+        "Local Network Guide": "Local Network Guide",
+        "Online Network Guide": "Online Network Guide",
+        "Close": "Close",
+        "local_instructions": "To play on the same Wi-Fi or LAN network:\n\n1. The Host opens Command Prompt (cmd) and types: ipconfig\n2. Find the 'IPv4 Address' line (e.g., 192.168.1.5).\n3. The Host clicks 'Host Game' inside the game and waits.\n4. Clients click 'Join Game', enter the Host's IPv4 Address,\n   and click Connect.\n\nNOTE: Ensure Windows Firewall doesn't block the game!",
+        "online_instructions": "To play over the Internet (with friends far away):\n\n1. Download and install Radmin VPN or Hamachi.\n2. Create a network in the app and have friends join it.\n3. The Host clicks 'Host Game' inside the game and waits.\n4. Clients click 'Join Game', enter the Host's IP Address\n   (copy it directly from Radmin/Hamachi), and Connect.\n\nNOTE: Ensure Windows Firewall doesn't block the game!"
     },
     "ru": {
         "Play": "Играть", "Settings": "Настройки", "Authors": "Авторы", "Exit": "Выход",
@@ -227,7 +233,13 @@ TRANSLATIONS = {
         "durak_rules": "Цель: Избавиться от всех карт! Последний с картами - проиграл.\nИгру начинает тот, у кого на руках козырь наименьшего достоинства.\nЗащитник бьет картой старше той же масти или любым козырем.\nНе можешь побить атаку - забираешь все карты со стола себе.\nАтакующие могут подкидывать карты того же номинала, что уже есть.",
         "poker_rules": "Цель: Собрать лучшую комбинацию из 5 карт (2 твои + 5 общих).\nДоступные действия: Колл (уравнять), Рейз (повысить), Фолд (сбросить)\nили Чек (передать ход, не делая ставку).\n4 раунда: Префлоп, Флоп (3 карты), Терн (1 карта), Ривер (1 карта).\nЛучшая покерная комбинация на вскрытии забирает весь банк!",
         "Крути-вези!": "Крути-вези!",
-        "Reset Bet": "Сброс ставки"
+        "Reset Bet": "Сброс ставки",
+        "Hold LMB and drag to scroll": "Зажмите ЛКМ для прокрутки",
+        "Local Network Guide": "Инструкция по локальной сети",
+        "Online Network Guide": "Инструкция по онлайн игре",
+        "Close": "Закрыть",
+        "local_instructions": "Для игры по одному Wi-Fi или LAN-кабелю:\n\n1. Хост открывает командную строку (cmd) и пишет: ipconfig\n2. Ищет строку 'IPv4-адрес' (например, 192.168.1.5).\n3. Хост в игре нажимает 'Создать' и ждет в лобби.\n4. Клиенты нажимают 'Присоединиться', вводят IP хоста\n   и подключаются.\n\nВАЖНО: Убедитесь, что брандмауэр Windows не блокирует игру!",
+        "online_instructions": "Для игры через Интернет с друзьями:\n\n1. Скачайте и установите Radmin VPN или Hamachi.\n2. Все игроки должны зайти в одну общую сеть в программе.\n3. Хост в игре нажимает 'Создать' и ждет в лобби.\n4. Клиенты нажимают 'Присоединиться', вводят IP хоста\n   (скопировав из Radmin/Hamachi) и подключаются.\n\nВАЖНО: Убедитесь, что брандмауэр Windows не блокирует игру!"
     }
 }
 

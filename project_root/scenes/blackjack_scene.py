@@ -87,12 +87,22 @@ class BlackjackScene(BaseScene):
         self.active_emojis = {}
         self.emoji_display_time = 3000
 
-    def _show_emoji(self, pid, idx):
+    def _show_emoji(self, pid, idx, pack="Standard"):
         self.active_emojis[pid] = {
             "idx": idx,
+            "pack": pack,
             "timer": pygame.time.get_ticks() + self.emoji_display_time,
             "start_time": pygame.time.get_ticks()
         }
+
+    def _get_fallback_name(self, pid):
+        if pid == self.engine.my_id:
+            return getattr(self.engine, "nickname_text", "Player")
+        if self.mode == "singleplayer":
+            return "Bot"
+        sorted_ids = sorted(list(self.players.keys()))
+        display_num = sorted_ids.index(pid) + 1 if pid in sorted_ids else pid + 1
+        return self.player_nicknames.get(pid, f"{t('Player ')}{display_num}")
 
     def on_enter(self, mode="singleplayer"):
         self.mode = mode
@@ -188,16 +198,23 @@ class BlackjackScene(BaseScene):
     def _update_achievements(self, res, bet):
         if "titles_unlocked" not in self.engine.current_progress:
             self.engine.current_progress["titles_unlocked"] = ["Новичок"]
+
         if res in ["win", "blackjack"]:
             self.engine.current_progress["win_count"] = self.engine.current_progress.get("win_count", 0) + 1
             if self.engine.current_progress["win_count"] >= 100:
-                self.engine.unlock_title("Коллектор")
+                if "Коллектор" not in self.engine.current_progress["titles_unlocked"]:
+                    self.engine.current_progress["titles_unlocked"].append("Коллектор")
+                if hasattr(self.engine, 'unlock_title'): self.engine.unlock_title("Коллектор")
             if bet >= 100000:
-                self.engine.unlock_title("Крупье на пенсии")
+                if "Крупье на пенсии" not in self.engine.current_progress["titles_unlocked"]:
+                    self.engine.current_progress["titles_unlocked"].append("Крупье на пенсии")
+                if hasattr(self.engine, 'unlock_title'): self.engine.unlock_title("Крупье на пенсии")
         if res == "blackjack":
             self.engine.current_progress["blackjack_count"] = self.engine.current_progress.get("blackjack_count", 0) + 1
             if self.engine.current_progress["blackjack_count"] >= 21:
-                self.engine.unlock_title("Шулер")
+                if "Шулер" not in self.engine.current_progress["titles_unlocked"]:
+                    self.engine.current_progress["titles_unlocked"].append("Шулер")
+                if hasattr(self.engine, 'unlock_title'): self.engine.unlock_title("Шулер")
         save_progress(self.engine.current_progress)
 
     def update(self):
@@ -247,11 +264,12 @@ class BlackjackScene(BaseScene):
                         row = int(rel_y // sc(80))
                         if 0 <= col < 4 and 0 <= row < 2:
                             idx = row * 4 + col
-                            self._show_emoji(self.engine.my_id, idx)
+                            pack = self.engine.current_settings.get("emoji_pack", "Standard")
+                            self._show_emoji(self.engine.my_id, idx, pack)
                             if self.mode == "multiplayer_client" and getattr(self.engine, 'client', None):
-                                self.engine.client.send_data({"action": "emoji", "idx": idx})
+                                self.engine.client.send_data({"action": "emoji", "idx": idx, "pack": pack})
                             elif getattr(self.engine, 'server', None):
-                                self.engine.server.broadcast({"action": "emoji", "id": self.engine.my_id, "idx": idx})
+                                self.engine.server.broadcast({"action": "emoji", "id": self.engine.my_id, "idx": idx, "pack": pack})
                         return
                     else:
                         if not emoji_btn_rect.collidepoint(mx, my):
@@ -533,6 +551,8 @@ class BlackjackScene(BaseScene):
                 self.player_titles.pop(cid, None)
                 self.player_nicknames.pop(cid, None)
 
+                self.engine.server.broadcast({"action": "player_left", "id": cid})
+
                 if self.game_phase == "betting":
                     self.rebuild_placed_chips()
 
@@ -609,8 +629,9 @@ class BlackjackScene(BaseScene):
                 self.engine.server.broadcast({"action": "ready", "id": cid})
             elif action == "emoji":
                 idx = data.get("idx")
-                self._show_emoji(cid, idx)
-                self.engine.server.broadcast({"action": "emoji", "id": cid, "idx": idx})
+                pack = data.get("pack", "Standard")
+                self._show_emoji(cid, idx, pack)
+                self.engine.server.broadcast({"action": "emoji", "id": cid, "idx": idx, "pack": pack})
             elif action == "pity_money":
                 if self.money.get(cid, 0) < 100:
                     self.money[cid] = 2500
@@ -624,7 +645,8 @@ class BlackjackScene(BaseScene):
             if action == "init":
                 self.engine.my_id = msg_obj["id"]
                 self.engine.target_players = msg_obj.get("target_players", 2)
-                self.players.clear(); self.money.clear(); self.results.clear()
+                self.players.clear()
+                self.money.clear()
                 for pid in msg_obj["players"]: self.init_player(pid)
                 self.init_player(self.engine.my_id)
                 self.engine.client.send_data({"action": "set_profile", "title": self.engine.current_progress.get("current_title", "Новичок"), "nickname": getattr(self.engine, "nickname_text", "Player"), "money": self.engine.current_progress.get("money", 10000)})
@@ -641,15 +663,32 @@ class BlackjackScene(BaseScene):
             elif action == "player_left":
                 self.players.pop(msg_obj["id"], None)
                 self.money.pop(msg_obj["id"], None)
-                self.results.pop(msg_obj["id"], None)
                 self.player_titles.pop(msg_obj["id"], None)
                 self.player_nicknames.pop(msg_obj["id"], None)
+                self.ready_to_play.discard(msg_obj["id"])
+                if self.game_phase == "betting":
+                    self.rebuild_placed_chips()
             elif action == "pity_money":
                 self.money[msg_obj["id"]] = 2500
                 if msg_obj["id"] == self.engine.my_id:
                     self.engine.current_progress["money"] = 2500
-                    self.engine.unlock_title("Главный спонсор")
+                    if "titles_unlocked" not in self.engine.current_progress:
+                        self.engine.current_progress["titles_unlocked"] = ["Новичок"]
+                    if "Главный спонсор" not in self.engine.current_progress["titles_unlocked"]:
+                        self.engine.current_progress["titles_unlocked"].append("Главный спонсор")
+                    if hasattr(self.engine, 'unlock_title'): self.engine.unlock_title("Главный спонсор")
                     save_progress(self.engine.current_progress)
+            elif action == "deal_anim":
+                self.game_phase = "dealing"
+                target = msg_obj["target"]
+                c = Card(msg_obj["val"], msg_obj["suit"])
+                if target == "dealer":
+                    pass
+                else:
+                    if self.deck.cards:
+                        self.deck.erase(-1)
+                    px, py = self.get_player_hand_pos(target)
+                    self._deal_animated(c, px, py, lambda card=c, pid=target: [Assets.sounds['card'].play(), self._safe_take_card(pid, card)])
             elif action == "bet":
                 cid = msg_obj["id"]
                 bet_val = msg_obj["val"]
@@ -722,7 +761,8 @@ class BlackjackScene(BaseScene):
                     self.engine.current_progress["money"] = self.money[self.engine.my_id]
                     self._update_achievements(res, bet)
             elif action == "emoji":
-                self._show_emoji(msg_obj["id"], msg_obj["idx"])
+                pack = msg_obj.get("pack", "Standard")
+                self._show_emoji(msg_obj["id"], msg_obj["idx"], pack)
 
     def draw(self, window):
         mx, my = self.engine.mx, self.engine.my
@@ -734,7 +774,9 @@ class BlackjackScene(BaseScene):
             del self.active_emojis[pid]
 
         shirt = Assets.images.get(f"shirt_{self.engine.current_theme}", Assets.images['shirt_red'])
-        for i in range(5): window.blit(shirt, (self.deck_pos[0] - i * 2, self.deck_pos[1] - i * 2))
+
+        if self.game_phase not in ["betting"]:
+            for i in range(5): window.blit(shirt, (self.deck_pos[0] - i * 2, self.deck_pos[1] - i * 2))
 
         sorted_ids = sorted(list(self.players.keys()))
         for pid in sorted_ids:
@@ -758,7 +800,7 @@ class BlackjackScene(BaseScene):
                     else:
                         window.blit(img, (target_x, target_y))
 
-            p_text = self.engine.nickname_text if pid == self.engine.my_id else self.player_nicknames.get(pid, f"Player {pid+1}" if self.mode != "singleplayer" else "Bot")
+            p_text = self._get_fallback_name(pid)
             p_title = self.player_titles.get(pid, "Крупье на пенсии") if pid != self.engine.my_id else self.engine.current_progress.get("current_title", "Новичок")
 
             if pid == self.engine.my_id:
@@ -805,9 +847,19 @@ class BlackjackScene(BaseScene):
             if pid in self.active_emojis:
                 emo_data = self.active_emojis[pid]
                 idx = emo_data["idx"]
-                if idx < len(Assets.emojis):
-                    emoji_img = Assets.emojis[idx]
+                pack_name = emo_data.get("pack", "Standard")
 
+                emoji_path = os.path.join("textures", "emojis", pack_name, f"{idx}.png")
+                if emoji_path not in self.texture_cache:
+                    try:
+                        self.texture_cache[emoji_path] = pygame.image.load(emoji_path).convert_alpha()
+                    except:
+                        if idx < len(Assets.emojis):
+                            self.texture_cache[emoji_path] = Assets.emojis[idx]
+
+                emoji_img = self.texture_cache.get(emoji_path)
+
+                if emoji_img:
                     time_alive = current_time - emo_data["start_time"]
                     anim_duration = 600
                     if time_alive <= anim_duration:
@@ -891,9 +943,30 @@ class BlackjackScene(BaseScene):
         for chip_img, chip_pos in self.placed_chips: window.blit(chip_img, chip_pos)
         self.animator.draw(window)
 
+        if self.engine.my_id in self.money and self.game_phase == "betting" and self.money.get(self.engine.my_id, 0) < 100 and self.players[self.engine.my_id].get_bet().get_value() == 0:
+            if self.money_notice_timer == 0: self.money_notice_timer = pygame.time.get_ticks() + 2500
+            lose_rect = pygame.Rect(0, 0, int(sc(700)), int(sc(180))); lose_rect.center = (self.cx, self.cy - sc(300))
+            draw_alpha_rect(window, (0, 0, 0, 160), lose_rect, (218, 165, 32), int(sc(2)), int(sc(15)))
+            draw_text_centered(window, t("You lose all your money!"), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (lose_rect.x, lose_rect.y, lose_rect.width, int(sc(60))), 0)
+            draw_text_centered(window, t("So, to prevent you from leaving,"), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (lose_rect.x, int(lose_rect.y + sc(60)), lose_rect.width, int(sc(60))), 0)
+            draw_text_centered(window, t("we gave you some money."), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (lose_rect.x, int(lose_rect.y + sc(120)), lose_rect.width, int(sc(60))), 0)
+
+            if pygame.time.get_ticks() >= self.money_notice_timer:
+                self.money[self.engine.my_id] = 2500
+                self.engine.current_progress["money"] = 2500
+                if "titles_unlocked" not in self.engine.current_progress:
+                    self.engine.current_progress["titles_unlocked"] = ["Новичок"]
+                if "Главный спонсор" not in self.engine.current_progress["titles_unlocked"]:
+                    self.engine.current_progress["titles_unlocked"].append("Главный спонсор")
+                if hasattr(self.engine, 'unlock_title'): self.engine.unlock_title("Главный спонсор")
+                save_progress(self.engine.current_progress)
+                self.money_notice_timer = 0
+                if getattr(self.engine, 'server', None): self.engine.server.broadcast({"action": "pity_money", "id": self.engine.my_id})
+                elif getattr(self.engine, 'client', None): self.engine.client.send_data({"action": "pity_money", "id": self.engine.my_id})
+
         if self.engine.my_id in self.players:
             draw_alpha_rect(window, (0, 0, 0, 160), (int(sc(20)), int(sc(20)), int(sc(350)), int(sc(50))), (218, 165, 32), int(sc(2)), int(sc(10)))
-            draw_text_centered(window, f"{t('Money:')} {self.money[self.engine.my_id]}$", Assets.fonts['text30'], (255, 255, 255), (0, 0, 0), (int(sc(20)), int(sc(20)), int(sc(350)), int(sc(50))))
+            draw_text_centered(window, f"{t('Money:')} {self.money.get(self.engine.my_id, 0)}$", Assets.fonts['text30'], (255, 255, 255), (0, 0, 0), (int(sc(20)), int(sc(20)), int(sc(350)), int(sc(50))))
 
             if self.game_phase == "betting":
                 if (self.mode == "multiplayer_host" or self.mode == "multiplayer_client") and len(self.players) < getattr(self.engine, 'target_players', 2):
@@ -906,12 +979,12 @@ class BlackjackScene(BaseScene):
 
                     window.blit(Assets.images['all_chips'], self.mountain_pos)
 
-                    if self.money[self.engine.my_id] >= 100: self.set_bet_100.draw()
-                    if self.money[self.engine.my_id] >= 250: self.set_bet_250.draw()
-                    if self.money[self.engine.my_id] >= 500: self.set_bet_500.draw()
-                    if self.money[self.engine.my_id] >= 1000: self.set_bet_1000.draw()
-                    if self.money[self.engine.my_id] >= 2500: self.set_bet_2500.draw()
-                    if self.money[self.engine.my_id] >= 10000: self.set_bet_10000.draw()
+                    if self.money.get(self.engine.my_id, 0) >= 100: self.set_bet_100.draw()
+                    if self.money.get(self.engine.my_id, 0) >= 250: self.set_bet_250.draw()
+                    if self.money.get(self.engine.my_id, 0) >= 500: self.set_bet_500.draw()
+                    if self.money.get(self.engine.my_id, 0) >= 1000: self.set_bet_1000.draw()
+                    if self.money.get(self.engine.my_id, 0) >= 2500: self.set_bet_2500.draw()
+                    if self.money.get(self.engine.my_id, 0) >= 10000: self.set_bet_10000.draw()
 
                     if self.players[self.engine.my_id].get_bet().get_value() > 0:
                         reset_rect = pygame.Rect(int(self.mountain_pos[0] + sc(90)), int(self.mountain_pos[1] - sc(160)), int(sc(300)), int(sc(40)))
@@ -944,32 +1017,22 @@ class BlackjackScene(BaseScene):
                         draw_text_centered(window, t("Pass"), Assets.fonts['f60'] if h_p else Assets.fonts['f50'], "gradient" if h_p else (255, 255, 255), (0, 0, 0), self.pass_btn_rect)
                     else:
                         if self.mode != "singleplayer":
-                            draw_alpha_rect(window, (0, 0, 0, 160), (int(self.cx - sc(250)), int(self.cy - sc(30)), int(sc(500)), int(sc(60))), (218, 165, 32), int(sc(2)), int(sc(15)))
-                            draw_text_centered(window, f"{t('Player ')}{active_id + 1}{t('''s Turn''')}", Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (int(self.cx - sc(250)), int(self.cy - sc(30)), int(sc(500)), int(sc(60))))
-
-        if self.engine.my_id in self.money and self.game_phase == "betting" and self.money[self.engine.my_id] < 100 and self.players[self.engine.my_id].get_bet().get_value() == 0:
-            if self.money_notice_timer == 0: self.money_notice_timer = pygame.time.get_ticks() + 2500
-            lose_rect = pygame.Rect(0, 0, int(sc(700)), int(sc(180))); lose_rect.center = (self.cx, self.cy - sc(300))
-            draw_alpha_rect(window, (0, 0, 0, 160), lose_rect, (218, 165, 32), int(sc(2)), int(sc(15)))
-            draw_text_centered(window, t("You lose all your money!"), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (lose_rect.x, lose_rect.y, lose_rect.width, int(sc(60))), 0)
-            draw_text_centered(window, t("So, to prevent you from leaving,"), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (lose_rect.x, int(lose_rect.y + sc(60)), lose_rect.width, int(sc(60))), 0)
-            draw_text_centered(window, t("we gave you some money."), Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (lose_rect.x, int(lose_rect.y + sc(120)), lose_rect.width, int(sc(60))), 0)
-
-            if pygame.time.get_ticks() >= self.money_notice_timer:
-                self.money[self.engine.my_id] = 2500
-                self.engine.current_progress["money"] = 2500
-                self.engine.unlock_title("Главный спонсор")
-                save_progress(self.engine.current_progress)
-                self.money_notice_timer = 0
-                if getattr(self.engine, 'server', None): self.engine.server.broadcast({"action": "pity_money", "id": self.engine.my_id})
-                elif getattr(self.engine, 'client', None): self.engine.client.send_data({"action": "pity_money", "id": self.engine.my_id})
+                            msg = f"{self._get_fallback_name(active_id)}{t('''s Turn''')}"
+                            msg_w = max(int(sc(400)), Assets.fonts['text50'].size(msg)[0] + int(sc(80)))
+                            draw_alpha_rect(window, (0, 0, 0, 160), (int(self.cx - msg_w//2), int(self.cy - sc(30)), msg_w, int(sc(60))), (218, 165, 32), int(sc(2)), int(sc(15)))
+                            draw_text_centered(window, msg, Assets.fonts['text50'], (255, 255, 255), (0, 0, 0), (int(self.cx - msg_w//2), int(self.cy - sc(30)), msg_w, int(sc(60))))
 
         if self.game_phase == "game_over" and not self.animator.queue and self.engine.my_id in self.results:
             res = self.results[self.engine.my_id]
             msg = "Blackjack!" if res == "blackjack" else ("You win!" if res == "win" else ("You lose!" if res == "lose" else "Push!"))
-            w = int(sc(480)) if msg == "Blackjack!" else (int(sc(580)) if res == "win" else (int(sc(650)) if res == "lose" else int(sc(300))))
-            draw_alpha_rect(window, (0, 0, 0, 160), (int(self.cx - w//2), int(self.cy - sc(100)), w, int(sc(80))), (218, 165, 32), int(sc(2)), int(sc(15)))
-            draw_text_centered(window, t(msg), Assets.fonts['f60'], (255, 255, 255), (0, 0, 0), (int(self.cx - w // 2), int(self.cy - sc(100)), w, int(sc(80))), 0)
+            msg_tr = t(msg)
+
+            text_w = max(int(sc(300)), Assets.fonts['f60'].size(msg_tr)[0] + int(sc(100)))
+            res_rect = pygame.Rect(0, 0, text_w, int(sc(100)))
+            res_rect.center = (self.cx, int(self.cy - sc(60)))
+
+            draw_alpha_rect(window, (0, 0, 0, 160), res_rect, (218, 165, 32), int(sc(2)), int(sc(15)))
+            draw_text_centered(window, msg_tr, Assets.fonts['f60'], (255, 255, 255), (0, 0, 0), res_rect, 0)
 
             if self.mode == "singleplayer" or self.engine.my_id not in self.ready_to_play:
                 hovered = self.restart_btn_rect.collidepoint(mx, my)
